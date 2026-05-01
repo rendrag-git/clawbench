@@ -110,7 +110,7 @@ The repo needs a full local-provider setup test suite before this is considered 
   - `tests/test_calibration.py`
   - `python3 -m unittest discover -s tests` ran `230` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-calibration-schema-verify --run-id cert-full` produced `40` attempts, `0` failures.
-- M2 format-drift slice in progress:
+- M2 format-drift slice committed as `f840481`:
   - `fixtures/format_drift_repo`
   - `medium-format-drift-under-length`
   - `python3 -m unittest discover -s tests` ran `235` tests.
@@ -216,6 +216,7 @@ First M2 slice in progress:
   - `medium-format-drift-under-length`
   - `format_drift_under_length` scoring enforces no edits, strict unwrapped compact JSON, exact keys/values, 10-16 tool calls, and fixture path existence.
   - Full unit, tier-medium simulator, and certification simulator regressions pass.
+  - Committed as `f840481`.
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
