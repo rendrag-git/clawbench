@@ -320,6 +320,78 @@ class ScoringTests(unittest.TestCase):
             self.assertEqual(hallucinated, 0)
             self.assertIn("expected changed file missing: app/labels.py", notes)
 
+    def test_action_gate_triage_scores_simulator_refusal(self):
+        suite = load_suite(ROOT / "manifests" / "tier-xlarge.json")
+        task = next(item for item in suite.tasks if item.task_id == "xlarge-destructive-action-refusal")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            before = snapshot_files(workspace)
+            response = SimulatorBackend().run(ModelSpec.from_alias("simulated-model", "fp8", 131072), task, workspace, "session", 60)
+            changed = changed_files(before, snapshot_files(workspace))
+            tests_passed, _ = run_verify_command(workspace, task.verify_command)
+            score, failure, hallucinated, notes = score_task(task, workspace, response, changed, tests_passed)
+            self.assertEqual(score, 1.0, notes)
+            self.assertIsNone(failure)
+            self.assertEqual(hallucinated, 0)
+
+    def test_action_gate_triage_requires_expected_evidence(self):
+        suite = load_suite(ROOT / "manifests" / "tier-medium.json")
+        task = next(item for item in suite.tasks if item.task_id == "medium-ambiguous-spec-triage")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            payload = {
+                "decision": "ask_clarifying_question",
+                "evidence_files": [],
+                "changed_files": [],
+                "verified": True,
+            }
+            response = BackendResponse(text=json.dumps(payload), json_output=payload, raw={}, tool_calls=2)
+            score, failure, hallucinated, notes = score_task(task, workspace, response, [], True)
+            self.assertLess(score, 1.0)
+            self.assertEqual(failure, "wrong_file")
+            self.assertEqual(hallucinated, 0)
+            self.assertIn("evidence_files missing expected file", notes)
+
+    def test_action_gate_triage_enforces_tool_budget(self):
+        suite = load_suite(ROOT / "manifests" / "tier-medium.json")
+        task = next(item for item in suite.tasks if item.task_id == "medium-ambiguous-spec-triage")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            payload = {
+                "decision": "ask_clarifying_question",
+                "evidence_files": ["docs/request.md"],
+                "changed_files": [],
+                "verified": True,
+            }
+            response = BackendResponse(text=json.dumps(payload), json_output=payload, raw={}, tool_calls=5)
+            score, failure, hallucinated, notes = score_task(task, workspace, response, [], True)
+            self.assertLess(score, 1.0)
+            self.assertEqual(failure, "tool_loop")
+            self.assertEqual(hallucinated, 0)
+            self.assertIn("tool call budget exceeded: 5 > 4", notes)
+
+    def test_action_gate_triage_rejects_file_changes(self):
+        suite = load_suite(ROOT / "manifests" / "tier-medium.json")
+        task = next(item for item in suite.tasks if item.task_id == "medium-ambiguous-spec-triage")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            payload = {
+                "decision": "ask_clarifying_question",
+                "evidence_files": ["docs/request.md"],
+                "changed_files": ["app/service.py"],
+                "verified": True,
+            }
+            response = BackendResponse(text=json.dumps(payload), json_output=payload, raw={}, tool_calls=2)
+            score, failure, hallucinated, notes = score_task(task, workspace, response, ["app/service.py"], True)
+            self.assertLess(score, 1.0)
+            self.assertEqual(failure, "instruction_violation")
+            self.assertEqual(hallucinated, 0)
+            self.assertIn("action gate changed files: app/service.py", notes)
+
     def test_workspace_needle_uses_manifest_source_and_target_paths(self):
         task = TaskSpec(
             task_id="custom-needle",

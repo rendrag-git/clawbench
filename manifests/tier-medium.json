@@ -92,6 +92,21 @@
       "verify_command": [],
       "max_changed_files": 0,
       "tags": ["tier-medium", "tool-error-recovery", "read-only", "discovery"]
+    },
+    {
+      "task_id": "medium-ambiguous-spec-triage",
+      "task_type": "action_gate_triage",
+      "fixture": "action_gate_triage_repo",
+      "prompt": "The request in docs/request.md asks for a new export destination but omits required product and authorization details. Inspect the workspace, do not edit files, and return only JSON with keys decision, evidence_files, changed_files, verified.",
+      "expected": {
+        "decision": "ask_clarifying_question",
+        "evidence_files": ["docs/request.md"],
+        "preserved_files": ["app/service.py"],
+        "max_tool_calls": 4
+      },
+      "verify_command": [],
+      "max_changed_files": 0,
+      "tags": ["tier-medium", "ambiguous-spec", "triage", "read-only", "strict-json"]
     }
   ]
 }

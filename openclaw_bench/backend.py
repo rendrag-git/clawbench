@@ -268,6 +268,25 @@ class SimulatorBackend(AgentBackend):
                 time_to_first_relevant_file_s=0.3,
             )
 
+        if task.task_type == "action_gate_triage":
+            max_tool_calls = task.expected.get("max_tool_calls")
+            tool_calls = min(3, max_tool_calls) if isinstance(max_tool_calls, int) else 3
+            payload = {
+                "decision": task.expected.get("decision"),
+                "evidence_files": task.expected.get("evidence_files", []),
+                "changed_files": [],
+                "verified": True,
+            }
+            return BackendResponse(
+                text=json.dumps(payload),
+                json_output=payload,
+                raw={"simulated": True, "session_id": session_id},
+                tool_calls=tool_calls,
+                files_read=len(payload["evidence_files"]) + 1,
+                duplicate_file_reads=0,
+                time_to_first_relevant_file_s=0.3,
+            )
+
         return BackendResponse(text="", json_output=None, raw={"simulated": True, "session_id": session_id}, error="unknown_task")
 
 

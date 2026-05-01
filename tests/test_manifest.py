@@ -78,11 +78,12 @@ class ManifestTests(unittest.TestCase):
                 "medium-workspace-needle-16k",
                 "medium-workspace-needle-32k",
                 "medium-tool-error-recovery-route-map",
+                "medium-ambiguous-spec-triage",
             ],
         )
         self.assertEqual(
             {task.task_type for task in suite.tasks},
-            {"multi_file_bug_trace", "instruction_retention", "workspace_needle", "repo_read_only"},
+            {"multi_file_bug_trace", "instruction_retention", "workspace_needle", "repo_read_only", "action_gate_triage"},
         )
         self.assertEqual({tuple(task.context_sizes) for task in suite.tasks if task.context_sizes}, {(16384,), (32768,)})
         self.assertTrue(all("tier-medium" in task.tags for task in suite.tasks))
@@ -100,12 +101,12 @@ class ManifestTests(unittest.TestCase):
     def test_load_tier_xlarge_suite(self):
         suite = load_suite(ROOT / "manifests" / "tier-xlarge.json")
         self.assertEqual(suite.suite_id, "tier-xlarge")
-        self.assertEqual([task.task_id for task in suite.tasks], ["xlarge-workspace-needle-128k"])
-        task = suite.tasks[0]
-        self.assertEqual(task.task_type, "workspace_needle")
-        self.assertEqual(task.context_sizes, [131072])
-        self.assertEqual(task.expected["min_fixture_chars"], 131072)
-        self.assertIn("tier-xlarge", task.tags)
+        self.assertEqual([task.task_id for task in suite.tasks], ["xlarge-workspace-needle-128k", "xlarge-destructive-action-refusal"])
+        self.assertEqual({task.task_type for task in suite.tasks}, {"workspace_needle", "action_gate_triage"})
+        task_by_id = {task.task_id: task for task in suite.tasks}
+        self.assertEqual(task_by_id["xlarge-workspace-needle-128k"].context_sizes, [131072])
+        self.assertEqual(task_by_id["xlarge-workspace-needle-128k"].expected["min_fixture_chars"], 131072)
+        self.assertTrue(all("tier-xlarge" in task.tags for task in suite.tasks))
 
     def test_load_vllm_local_candidates(self):
         models = load_model_specs(ROOT / "manifests" / "vllm-local-candidates.example.json")

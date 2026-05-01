@@ -162,6 +162,19 @@ def _check_task_expected_paths(task: object, fixture: Path) -> list[PreflightChe
         checks = [_check_required_expected_keys(task_id, expected, required)]
         checks.extend(_check_fixture_file_refs(task_id, fixture, expected, ["source_file", "target_file"]))
         return checks
+    if task_type == "action_gate_triage":
+        checks = [_check_required_expected_keys(task_id, expected, ["decision", "evidence_files", "preserved_files", "max_tool_calls"])]
+        evidence_files = expected.get("evidence_files")
+        preserved_files = expected.get("preserved_files")
+        if isinstance(evidence_files, list):
+            checks.extend(_check_fixture_paths(task_id, fixture, evidence_files, "evidence_files"))
+        else:
+            checks.append(PreflightCheck(f"expected_paths:{task_id}:evidence_files", "fail", "evidence_files must be a list"))
+        if isinstance(preserved_files, list):
+            checks.extend(_check_fixture_paths(task_id, fixture, preserved_files, "preserved_files"))
+        else:
+            checks.append(PreflightCheck(f"expected_paths:{task_id}:preserved_files", "fail", "preserved_files must be a list"))
+        return checks
     return []
 
 

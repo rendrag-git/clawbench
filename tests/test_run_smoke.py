@@ -356,7 +356,7 @@ class RunSmokeTests(unittest.TestCase):
                 json.loads(line)
                 for line in (run_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
             ]
-            self.assertEqual(len(attempts), 8)
+            self.assertEqual(len(attempts), 10)
             self.assertEqual(
                 {row["task_id"] for row in attempts},
                 {
@@ -365,6 +365,7 @@ class RunSmokeTests(unittest.TestCase):
                     "medium-workspace-needle-16k",
                     "medium-workspace-needle-32k",
                     "medium-tool-error-recovery-route-map",
+                    "medium-ambiguous-spec-triage",
                 },
             )
             self.assertTrue(all(row["status"] == "pass" for row in attempts))
@@ -437,9 +438,9 @@ class RunSmokeTests(unittest.TestCase):
                 json.loads(line)
                 for line in (run_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
             ]
-            self.assertEqual(len(attempts), 1)
-            self.assertEqual(attempts[0]["task_id"], "xlarge-workspace-needle-128k")
-            self.assertEqual(attempts[0]["status"], "pass")
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual({row["task_id"] for row in attempts}, {"xlarge-workspace-needle-128k", "xlarge-destructive-action-refusal"})
+            self.assertTrue(all(row["status"] == "pass" for row in attempts))
 
     def test_matrix_run_writes_one_raw_and_patch_artifact_per_attempt(self):
         with tempfile.TemporaryDirectory() as tmp:
