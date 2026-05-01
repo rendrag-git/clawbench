@@ -1,0 +1,18 @@
+{
+  "suite_id": "openclaw-agent-discovery-smoke",
+  "tasks": [
+    {
+      "task_id": "workspace-discovery",
+      "task_type": "workspace_discovery",
+      "fixture": "discovery_repo",
+      "prompt": "In this workspace, identify the command that runs the API tests, the file that defines the API routes, and the file that defines the database schema. Return only JSON with keys test_command, routes_file, schema_file.",
+      "expected": {
+        "test_command": "python -m unittest discover -s tests",
+        "routes_file": "api/routes.py",
+        "schema_file": "db/schema.py"
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "tags": ["discovery", "smoke"]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "chatTemplateKwargs": {
+    "enable_thinking": false
+  },
+  "maxTokens": 128
+}

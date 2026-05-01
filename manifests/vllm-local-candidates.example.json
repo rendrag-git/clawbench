@@ -1,0 +1,478 @@
+{
+  "manifest_scope": {
+    "portability": "host_specific",
+    "notes": "Example for this workstation: edit vLLM path, CUDA_VISIBLE_DEVICES, port, model ids, and hardware_profile before using on another host."
+  },
+  "models": [
+    {
+      "model_id": "shanjiaz/gpt-oss-20b-nvfp4-modelopt",
+      "served_model_name": "gpt-oss-20b-nvfp4-fp8",
+      "openclaw_model_name": "vllm/gpt-oss-20b-nvfp4-fp8",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-vllm-4k",
+      "weight_quant": "nvfp4",
+      "kv_modes": [
+        "fp8"
+      ],
+      "contexts": [
+        4096
+      ],
+      "concurrency": [
+        1,
+        4
+      ],
+      "serve_env": {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "serve_command": [
+        "/home/ubuntu/.venvs/vllm/bin/vllm",
+        "serve",
+        "shanjiaz/gpt-oss-20b-nvfp4-modelopt",
+        "--served-model-name",
+        "gpt-oss-20b-nvfp4-fp8",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--quantization",
+        "modelopt_fp4",
+        "--dtype",
+        "bfloat16",
+        "--kv-cache-dtype",
+        "fp8",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-model-len",
+        "4096"
+      ],
+      "health_check_url": "http://127.0.0.1:8000/v1/models",
+      "api_base": "http://127.0.0.1:8000/v1",
+      "api_env": "VLLM_API_KEY",
+      "expected_support": "GPT-OSS 20B ModelOpt NVFP4 production candidate with FP8 KV baseline."
+    },
+    {
+      "model_id": "RedHatAI/Qwen3.6-35B-A3B-NVFP4",
+      "served_model_name": "qwen3.6-35b-a3b-nvfp4-fp8",
+      "openclaw_model_name": "vllm/qwen3.6-35b-a3b-nvfp4-fp8",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-vllm-4k",
+      "weight_quant": "nvfp4",
+      "kv_modes": [
+        "fp8"
+      ],
+      "contexts": [
+        4096
+      ],
+      "concurrency": [
+        1,
+        4
+      ],
+      "serve_env": {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "serve_command": [
+        "/home/ubuntu/.venvs/vllm/bin/vllm",
+        "serve",
+        "RedHatAI/Qwen3.6-35B-A3B-NVFP4",
+        "--served-model-name",
+        "qwen3.6-35b-a3b-nvfp4-fp8",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--quantization",
+        "modelopt_fp4",
+        "--dtype",
+        "bfloat16",
+        "--kv-cache-dtype",
+        "fp8",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-model-len",
+        "4096"
+      ],
+      "health_check_url": "http://127.0.0.1:8000/v1/models",
+      "api_base": "http://127.0.0.1:8000/v1",
+      "api_env": "VLLM_API_KEY",
+      "expected_support": "Qwen3.6 35B-A3B NVFP4 production candidate with FP8 KV baseline."
+    },
+    {
+      "model_id": "RedHatAI/Qwen3.6-35B-A3B-NVFP4",
+      "served_model_name": "qwen3.6-35b-a3b-nvfp4-k8v4",
+      "openclaw_model_name": "vllm/qwen3.6-35b-a3b-nvfp4-k8v4",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-vllm-4k",
+      "weight_quant": "nvfp4",
+      "kv_modes": [
+        "turboquant_k8v4"
+      ],
+      "contexts": [
+        4096
+      ],
+      "concurrency": [
+        1,
+        4
+      ],
+      "serve_env": {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "serve_command": [
+        "/home/ubuntu/.venvs/vllm/bin/vllm",
+        "serve",
+        "RedHatAI/Qwen3.6-35B-A3B-NVFP4",
+        "--served-model-name",
+        "qwen3.6-35b-a3b-nvfp4-k8v4",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--quantization",
+        "modelopt_fp4",
+        "--dtype",
+        "bfloat16",
+        "--kv-cache-dtype",
+        "turboquant_k8v4",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-model-len",
+        "4096"
+      ],
+      "health_check_url": "http://127.0.0.1:8000/v1/models",
+      "api_base": "http://127.0.0.1:8000/v1",
+      "api_env": "VLLM_API_KEY",
+      "expected_support": "Qwen3.6 35B-A3B NVFP4 TurboQuant K8V4 candidate."
+    },
+    {
+      "model_id": "RedHatAI/Qwen3.6-35B-A3B-NVFP4",
+      "served_model_name": "qwen3.6-35b-a3b-nvfp4-k3v4-nc",
+      "openclaw_model_name": "vllm/qwen3.6-35b-a3b-nvfp4-k3v4-nc",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-vllm-4k",
+      "weight_quant": "nvfp4",
+      "kv_modes": [
+        "turboquant_k3v4_nc"
+      ],
+      "contexts": [
+        4096
+      ],
+      "concurrency": [
+        1,
+        4
+      ],
+      "serve_env": {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "serve_command": [
+        "/home/ubuntu/.venvs/vllm/bin/vllm",
+        "serve",
+        "RedHatAI/Qwen3.6-35B-A3B-NVFP4",
+        "--served-model-name",
+        "qwen3.6-35b-a3b-nvfp4-k3v4-nc",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--quantization",
+        "modelopt_fp4",
+        "--dtype",
+        "bfloat16",
+        "--kv-cache-dtype",
+        "turboquant_k3v4_nc",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-model-len",
+        "4096"
+      ],
+      "health_check_url": "http://127.0.0.1:8000/v1/models",
+      "api_base": "http://127.0.0.1:8000/v1",
+      "api_env": "VLLM_API_KEY",
+      "expected_support": "Qwen3.6 35B-A3B NVFP4 TurboQuant K3V4 non-contiguous candidate."
+    },
+    {
+      "model_id": "RedHatAI/gemma-4-26B-A4B-it-NVFP4",
+      "served_model_name": "gemma4-26b-a4b-nvfp4-fp8",
+      "openclaw_model_name": "vllm/gemma4-26b-a4b-nvfp4-fp8",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-vllm-4k",
+      "weight_quant": "nvfp4",
+      "kv_modes": [
+        "fp8"
+      ],
+      "contexts": [
+        4096
+      ],
+      "concurrency": [
+        1,
+        4
+      ],
+      "serve_env": {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "serve_command": [
+        "/home/ubuntu/.venvs/vllm/bin/vllm",
+        "serve",
+        "RedHatAI/gemma-4-26B-A4B-it-NVFP4",
+        "--served-model-name",
+        "gemma4-26b-a4b-nvfp4-fp8",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--quantization",
+        "modelopt_fp4",
+        "--dtype",
+        "bfloat16",
+        "--kv-cache-dtype",
+        "fp8",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-model-len",
+        "4096"
+      ],
+      "health_check_url": "http://127.0.0.1:8000/v1/models",
+      "api_base": "http://127.0.0.1:8000/v1",
+      "api_env": "VLLM_API_KEY",
+      "expected_support": "Gemma 4 26B-A4B instruct NVFP4 candidate; OOM is recorded as benchmark data if it does not fit."
+    },
+    {
+      "model_id": "nvidia/Gemma-4-31B-IT-NVFP4",
+      "served_model_name": "gemma4-31b-nvfp4-fp8",
+      "openclaw_model_name": "vllm/gemma4-31b-nvfp4-fp8",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-vllm-4k",
+      "weight_quant": "nvfp4",
+      "kv_modes": [
+        "fp8"
+      ],
+      "contexts": [
+        4096
+      ],
+      "concurrency": [
+        1,
+        4
+      ],
+      "serve_env": {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "serve_command": [
+        "/home/ubuntu/.venvs/vllm/bin/vllm",
+        "serve",
+        "nvidia/Gemma-4-31B-IT-NVFP4",
+        "--served-model-name",
+        "gemma4-31b-nvfp4-fp8",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--quantization",
+        "modelopt_fp4",
+        "--dtype",
+        "bfloat16",
+        "--kv-cache-dtype",
+        "fp8",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-model-len",
+        "4096"
+      ],
+      "health_check_url": "http://127.0.0.1:8000/v1/models",
+      "api_base": "http://127.0.0.1:8000/v1",
+      "api_env": "VLLM_API_KEY",
+      "expected_support": "Dense Gemma 4 31B IT NVFP4 candidate; OOM is recorded as benchmark data if it does not fit."
+    },
+    {
+      "model_id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
+      "served_model_name": "nemotron3-nano-30b-a3b-nvfp4-fp8",
+      "openclaw_model_name": "vllm/nemotron3-nano-30b-a3b-nvfp4-fp8",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-vllm-4k",
+      "weight_quant": "nvfp4",
+      "kv_modes": [
+        "fp8"
+      ],
+      "contexts": [
+        4096
+      ],
+      "concurrency": [
+        1,
+        4
+      ],
+      "serve_env": {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "serve_command": [
+        "/home/ubuntu/.venvs/vllm/bin/vllm",
+        "serve",
+        "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
+        "--served-model-name",
+        "nemotron3-nano-30b-a3b-nvfp4-fp8",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--quantization",
+        "modelopt_fp4",
+        "--dtype",
+        "bfloat16",
+        "--kv-cache-dtype",
+        "fp8",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-model-len",
+        "4096"
+      ],
+      "health_check_url": "http://127.0.0.1:8000/v1/models",
+      "api_base": "http://127.0.0.1:8000/v1",
+      "api_env": "VLLM_API_KEY",
+      "expected_support": "NVIDIA Nemotron 3 Nano 30B-A3B NVFP4 production candidate."
+    },
+    {
+      "model_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2-NVFP4",
+      "served_model_name": "nemotron-nano-9b-v2-nvfp4-fp8",
+      "openclaw_model_name": "vllm/nemotron-nano-9b-v2-nvfp4-fp8",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-vllm-4k",
+      "weight_quant": "nvfp4",
+      "kv_modes": [
+        "fp8"
+      ],
+      "contexts": [
+        4096
+      ],
+      "concurrency": [
+        1,
+        4
+      ],
+      "serve_env": {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "serve_command": [
+        "/home/ubuntu/.venvs/vllm/bin/vllm",
+        "serve",
+        "nvidia/NVIDIA-Nemotron-Nano-9B-v2-NVFP4",
+        "--served-model-name",
+        "nemotron-nano-9b-v2-nvfp4-fp8",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--quantization",
+        "modelopt_fp4",
+        "--dtype",
+        "bfloat16",
+        "--kv-cache-dtype",
+        "fp8",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-model-len",
+        "4096"
+      ],
+      "health_check_url": "http://127.0.0.1:8000/v1/models",
+      "api_base": "http://127.0.0.1:8000/v1",
+      "api_env": "VLLM_API_KEY",
+      "expected_support": "Smaller Nemotron Nano 9B v2 NVFP4 candidate for lower-latency/local-capacity comparison."
+    },
+    {
+      "model_id": "RedHatAI/Qwen3-Coder-Next-NVFP4",
+      "served_model_name": "qwen3-coder-next-nvfp4-fp8",
+      "openclaw_model_name": "vllm/qwen3-coder-next-nvfp4-fp8",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-vllm-4k",
+      "weight_quant": "nvfp4",
+      "kv_modes": [
+        "fp8"
+      ],
+      "contexts": [
+        4096
+      ],
+      "concurrency": [
+        1,
+        4
+      ],
+      "serve_env": {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "serve_command": [
+        "/home/ubuntu/.venvs/vllm/bin/vllm",
+        "serve",
+        "RedHatAI/Qwen3-Coder-Next-NVFP4",
+        "--served-model-name",
+        "qwen3-coder-next-nvfp4-fp8",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--quantization",
+        "modelopt_fp4",
+        "--dtype",
+        "bfloat16",
+        "--kv-cache-dtype",
+        "fp8",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-model-len",
+        "4096"
+      ],
+      "health_check_url": "http://127.0.0.1:8000/v1/models",
+      "api_base": "http://127.0.0.1:8000/v1",
+      "api_env": "VLLM_API_KEY",
+      "expected_support": "Qwen3-Coder-Next NVFP4 candidate for code-heavy OpenClaw tasks."
+    },
+    {
+      "model_id": "nvidia/Qwen3-Next-80B-A3B-Instruct-NVFP4",
+      "served_model_name": "qwen3-next-80b-a3b-instruct-nvfp4-fp8",
+      "openclaw_model_name": "vllm/qwen3-next-80b-a3b-instruct-nvfp4-fp8",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-vllm-4k",
+      "weight_quant": "nvfp4",
+      "kv_modes": [
+        "fp8"
+      ],
+      "contexts": [
+        4096
+      ],
+      "concurrency": [
+        1,
+        4
+      ],
+      "serve_env": {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "serve_command": [
+        "/home/ubuntu/.venvs/vllm/bin/vllm",
+        "serve",
+        "nvidia/Qwen3-Next-80B-A3B-Instruct-NVFP4",
+        "--served-model-name",
+        "qwen3-next-80b-a3b-instruct-nvfp4-fp8",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--quantization",
+        "modelopt_fp4",
+        "--dtype",
+        "bfloat16",
+        "--kv-cache-dtype",
+        "fp8",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-model-len",
+        "4096"
+      ],
+      "health_check_url": "http://127.0.0.1:8000/v1/models",
+      "api_base": "http://127.0.0.1:8000/v1",
+      "api_env": "VLLM_API_KEY",
+      "expected_support": "Qwen3 Next 80B-A3B Instruct NVFP4 candidate; useful if coder-specific checkpoint has runtime issues."
+    }
+  ]
+}

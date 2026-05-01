@@ -1,0 +1,18 @@
+{
+  "baseUrl": "https://api.anthropic.com",
+  "api": "anthropic-messages",
+  "apiKey": {
+    "source": "env",
+    "provider": "bench",
+    "id": "ANTHROPIC_API_KEY"
+  },
+  "models": [
+    {
+      "id": "claude-sonnet",
+      "name": "claude-sonnet",
+      "contextWindow": 32768,
+      "contextTokens": 32768,
+      "maxTokens": 1024
+    }
+  ]
+}

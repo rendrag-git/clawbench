@@ -1,0 +1,24 @@
+{
+  "baseUrl": "http://127.0.0.1:8000/v1",
+  "api": "openai-completions",
+  "request": {
+    "auth": {
+      "mode": "authorization-bearer",
+      "token": {
+        "source": "env",
+        "provider": "bench",
+        "id": "VLLM_API_KEY"
+      }
+    },
+    "allowPrivateNetwork": true
+  },
+  "models": [
+    {
+      "id": "gpt-oss-20b-nvfp4-smoke",
+      "name": "gpt-oss-20b-nvfp4-smoke",
+      "contextWindow": 4096,
+      "contextTokens": 4096,
+      "maxTokens": 256
+    }
+  ]
+}

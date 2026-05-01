@@ -1,0 +1,8 @@
+{
+  "suite_id": "openclaw-certification-full-example",
+  "include_suites": [
+    "openclaw-agent-core.json",
+    "real-repo-readonly.example.json"
+  ],
+  "tasks": []
+}

@@ -1,0 +1,18 @@
+{
+  "baseUrl": "https://api.openai.com/v1",
+  "api": "openai-responses",
+  "apiKey": {
+    "source": "env",
+    "provider": "bench",
+    "id": "OPENAI_API_KEY"
+  },
+  "models": [
+    {
+      "id": "gpt-4.1",
+      "name": "gpt-4.1",
+      "contextWindow": 32768,
+      "contextTokens": 32768,
+      "maxTokens": 1024
+    }
+  ]
+}

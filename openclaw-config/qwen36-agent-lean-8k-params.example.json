@@ -1,0 +1,12 @@
+{
+  "maxTokens": 32,
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "extra_body": {
+    "max_completion_tokens": 32,
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  }
+}

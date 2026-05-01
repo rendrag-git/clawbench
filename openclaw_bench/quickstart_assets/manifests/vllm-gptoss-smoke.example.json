@@ -1,0 +1,48 @@
+{
+  "manifest_scope": {
+    "portability": "host_specific",
+    "notes": "Example for this workstation: edit vLLM path, CUDA_VISIBLE_DEVICES, port, model ids, and hardware_profile before using on another host."
+  },
+  "models": [
+    {
+      "model_id": "shanjiaz/gpt-oss-20b-nvfp4-modelopt",
+      "served_model_name": "gpt-oss-20b-nvfp4-smoke",
+      "openclaw_model_name": "vllm/gpt-oss-20b-nvfp4-smoke",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-vllm-smoke",
+      "weight_quant": "nvfp4",
+      "kv_modes": ["fp8"],
+      "contexts": [4096],
+      "concurrency": [1],
+      "serve_env": {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "serve_command": [
+        "/home/ubuntu/.venvs/vllm/bin/vllm",
+        "serve",
+        "shanjiaz/gpt-oss-20b-nvfp4-modelopt",
+        "--served-model-name",
+        "gpt-oss-20b-nvfp4-smoke",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--quantization",
+        "modelopt_fp4",
+        "--dtype",
+        "bfloat16",
+        "--kv-cache-dtype",
+        "fp8",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-model-len",
+        "4096"
+      ],
+      "health_check_url": "http://127.0.0.1:8000/v1/models",
+      "api_base": "http://127.0.0.1:8000/v1",
+      "api_env": "VLLM_API_KEY",
+      "expected_support": "Smallest live GPT-OSS vLLM smoke cell for route, serve-probe, and OpenClaw routing validation."
+    }
+  ]
+}

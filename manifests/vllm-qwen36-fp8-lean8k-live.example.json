@@ -1,0 +1,29 @@
+{
+  "manifest_scope": {
+    "portability": "host_specific",
+    "notes": "Example for this workstation's oc-bench container reaching host vLLM at 10.68.198.1:8000; edit api_base and health_check_url for another host."
+  },
+  "models": [
+    {
+      "model_id": "Qwen/Qwen3.6-35B-A3B-FP8",
+      "served_model_name": "qwen3.6-35b-a3b",
+      "openclaw_model_name": "vllm/qwen3.6-35b-a3b",
+      "provider_type": "local",
+      "hardware_profile": "gpu1-rtx-pro-5000-blackwell-gmu85-eager-qwen3xml-no-think-ctx8192-lean-max32",
+      "weight_quant": "fp8",
+      "kv_modes": [
+        "auto"
+      ],
+      "contexts": [
+        8192
+      ],
+      "concurrency": [
+        1
+      ],
+      "health_check_url": "http://10.68.198.1:8000/v1/models",
+      "api_base": "http://10.68.198.1:8000/v1",
+      "support_status": "candidate_external",
+      "expected_support": "Lean-control-plane Qwen3.6 35B-A3B FP8 vLLM server on the amax host with qwen3_xml auto tool-choice enabled, 8k context, maxTokens=32, and thinking disabled in the isolated oc-bench OpenClaw profile."
+    }
+  ]
+}

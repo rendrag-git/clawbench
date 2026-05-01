@@ -1,0 +1,8 @@
+{
+  "contextInjection": "never",
+  "bootstrapMaxChars": 1024,
+  "bootstrapTotalMaxChars": 4096,
+  "experimental": {
+    "localModelLean": true
+  }
+}

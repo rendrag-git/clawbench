@@ -1,0 +1,22 @@
+[project]
+name = "openclaw-local-model-bench"
+version = "0.1.0"
+description = "Benchmark harness for OpenClaw agent performance across local and API LLM providers."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+oc-bench = "openclaw_bench.cli:main"
+openclaw-bench = "openclaw_bench.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["openclaw_bench*"]
+
+[tool.setuptools.package-data]
+openclaw_bench = ["quickstart_assets/**/*.json", "quickstart_assets/**/*.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

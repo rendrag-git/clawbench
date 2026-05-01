@@ -1,0 +1,60 @@
+{
+  "suite_id": "real-repo-readonly-example",
+  "tasks": [
+    {
+      "task_id": "real-repo-route-map",
+      "task_type": "repo_read_only",
+      "fixture": "real_repos/kingshot-ams-snapshot",
+      "prompt": "Using only this workspace, identify the relative path of the file that registers the public order API routes. Do not edit files. Return only JSON with keys answer and evidence_files.",
+      "expected": {
+        "answer": "api/routes.py",
+        "evidence_files": ["api/routes.py"]
+      },
+      "verify_command": [],
+      "max_changed_files": 0,
+      "tags": ["real-repo", "read-only", "discovery"]
+    },
+    {
+      "task_id": "real-repo-auth-guard",
+      "task_type": "repo_read_only",
+      "fixture": "real_repos/kingshot-ams-snapshot",
+      "prompt": "Using only this workspace, identify the relative path of the file that defines the staff-session guard used by admin routes. Do not edit files. Return only JSON with keys answer and evidence_files.",
+      "expected": {
+        "answer": "api/auth.py",
+        "evidence_files": ["api/auth.py", "api/routes.py"]
+      },
+      "verify_command": [],
+      "max_changed_files": 0,
+      "tags": ["real-repo", "read-only", "discovery", "auth"]
+    },
+    {
+      "task_id": "real-repo-order-status-edit",
+      "task_type": "repo_code_edit",
+      "fixture": "real_repos/kingshot-ams-snapshot",
+      "prompt": "Using this workspace, make the smallest production code change so shipped order ids report status shipped. Keep existing order creation and regular order status behavior unchanged. Do not edit tests or route/auth files.",
+      "expected": {
+        "changed_files": ["services/orders.py"],
+        "behavior_checks": [
+          {
+            "call": "services.orders.create_order",
+            "args": [{"order_id": "ORD-100"}],
+            "equals": {"order_id": "ORD-100", "status": "created"}
+          },
+          {
+            "call": "services.orders.order_status",
+            "args": ["ORD-100"],
+            "equals": {"order_id": "ORD-100", "status": "processing"}
+          },
+          {
+            "call": "services.orders.order_status",
+            "args": ["SHIP-200"],
+            "equals": {"order_id": "SHIP-200", "status": "shipped"}
+          }
+        ]
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "max_changed_files": 1,
+      "tags": ["real-repo", "code-edit", "patch", "orders"]
+    }
+  ]
+}

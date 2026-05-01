@@ -1,0 +1,26 @@
+{
+  "models": [
+    {
+      "model_id": "openai-gpt-4.1",
+      "served_model_name": "openai/gpt-4.1",
+      "provider_type": "api",
+      "weight_quant": "provider_default",
+      "kv_modes": ["provider_default"],
+      "contexts": [4096, 8192, 32768],
+      "concurrency": [1, 4, 16],
+      "api_env": "OPENAI_API_KEY",
+      "expected_support": "OpenClaw profile must route this served_model_name to the provider; secrets stay in environment/profile config."
+    },
+    {
+      "model_id": "anthropic-claude-sonnet",
+      "served_model_name": "anthropic/claude-sonnet",
+      "provider_type": "subscription",
+      "weight_quant": "provider_default",
+      "kv_modes": ["provider_default"],
+      "contexts": [4096, 8192, 32768],
+      "concurrency": [1, 4, 16],
+      "api_env": "ANTHROPIC_API_KEY",
+      "expected_support": "OpenClaw profile must route this served_model_name to the provider; secrets stay in environment/profile config."
+    }
+  ]
+}

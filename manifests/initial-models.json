@@ -1,0 +1,30 @@
+{
+  "models": [
+    {
+      "model_id": "gpt-oss-20b-nvfp4",
+      "served_model_name": "gpt-oss-20b-nvfp4",
+      "provider_type": "local",
+      "weight_quant": "nvfp4",
+      "kv_modes": ["fp8"],
+      "contexts": [4096],
+      "concurrency": [1],
+      "support_status": "assumed_supported",
+      "serve_args": [],
+      "serve_command": [],
+      "expected_support": "Initial working local candidate; start with fp8 KV."
+    },
+    {
+      "model_id": "qwen3-dense",
+      "served_model_name": "qwen3-dense",
+      "provider_type": "local",
+      "weight_quant": "bf16",
+      "kv_modes": ["fp8", "turboquant_k8v4", "turboquant_k3v4_nc"],
+      "contexts": [4096],
+      "concurrency": [1],
+      "support_status": "assumed_supported",
+      "serve_args": [],
+      "serve_command": [],
+      "expected_support": "Dense Qwen sanity candidate for TurboQuant KV support."
+    }
+  ]
+}
