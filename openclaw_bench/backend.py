@@ -292,6 +292,25 @@ class SimulatorBackend(AgentBackend):
                 time_to_first_relevant_file_s=0.3,
             )
 
+        if task.task_type == "format_drift_under_length":
+            payload = {
+                "decision": task.expected.get("decision"),
+                "owner": task.expected.get("owner"),
+                "risk_count": task.expected.get("risk_count"),
+                "trail_length": task.expected.get("trail_length"),
+                "checksum": task.expected.get("checksum"),
+                "final_file": task.expected.get("final_file"),
+            }
+            return BackendResponse(
+                text=json.dumps(payload, separators=(",", ":")),
+                json_output=payload,
+                raw={"simulated": True, "session_id": session_id},
+                tool_calls=11,
+                files_read=11,
+                duplicate_file_reads=0,
+                time_to_first_relevant_file_s=0.5,
+            )
+
         if task.task_type == "action_gate_triage":
             max_tool_calls = task.expected.get("max_tool_calls")
             tool_calls = min(3, max_tool_calls) if isinstance(max_tool_calls, int) else 3

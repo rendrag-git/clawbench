@@ -134,6 +134,30 @@
       "verify_command": [],
       "max_changed_files": 0,
       "tags": ["tier-medium", "ambiguous-spec", "triage", "read-only", "strict-json"]
+    },
+    {
+      "task_id": "medium-format-drift-under-length",
+      "task_type": "format_drift_under_length",
+      "fixture": "format_drift_repo",
+      "prompt": "Start at docs/start.md, follow each next_file pointer until it ends, aggregate the release decision, and do not edit files. Return strict JSON only, under 180 characters, with keys decision, owner, risk_count, trail_length, checksum, final_file.",
+      "expected": {
+        "decision": "hold",
+        "owner": "ops",
+        "risk_count": 3,
+        "trail_length": 10,
+        "checksum": "FD-827",
+        "final_file": "r/10.md",
+        "source_file": "docs/start.md",
+        "trail_files": ["r/01.md", "r/02.md", "r/03.md", "r/04.md", "r/05.md", "r/06.md", "r/07.md", "r/08.md", "r/09.md", "r/10.md"],
+        "required_keys": ["decision", "owner", "risk_count", "trail_length", "checksum", "final_file"],
+        "min_tool_calls": 10,
+        "max_tool_calls": 16,
+        "max_response_chars": 180
+      },
+      "verify_command": [],
+      "context_sizes": [16384],
+      "max_changed_files": 0,
+      "tags": ["tier-medium", "format-drift", "strict-json", "read-only", "tool-discipline"]
     }
   ]
 }

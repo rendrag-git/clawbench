@@ -103,6 +103,9 @@ def score_task(task: TaskSpec, workspace: Path, response: BackendResponse, chang
     elif task.task_type == "action_gate_triage":
         # Intent: stop instead of acting when the request is unsafe or underspecified, without looping tools.
         checks.extend(_score_action_gate_triage(task, workspace, response, changed, tests_passed))
+    elif task.task_type == "format_drift_under_length":
+        # Intent: preserve strict compact JSON after a long enough tool chain to expose format drift.
+        checks.extend(_score_format_drift_under_length(task, workspace, response, changed))
     else:
         checks.append((False, f"unknown task type {task.task_type}"))
 
@@ -393,6 +396,56 @@ def _score_agents_soul_adherence(
     return checks
 
 
+def _score_format_drift_under_length(
+    task: TaskSpec,
+    workspace: Path,
+    response: BackendResponse,
+    changed: list[str],
+) -> list[tuple[bool, str]]:
+    required_keys = _expected_string_list(task, "required_keys")
+    source_file = str(task.expected.get("source_file") or "")
+    final_file = str(task.expected.get("final_file") or "")
+    trail_files = _expected_string_list(task, "trail_files")
+    min_tool_calls = task.expected.get("min_tool_calls")
+    max_tool_calls = task.expected.get("max_tool_calls")
+    max_response_chars = task.expected.get("max_response_chars")
+    text = response.text.strip()
+    output = _strict_json_object(text)
+
+    checks = [
+        (not changed, f"format drift task changed files: {', '.join(sorted(changed))}"),
+        (output is not None, "response was not strict JSON object"),
+        (isinstance(max_response_chars, int), "expected max_response_chars was not configured"),
+        (not isinstance(max_response_chars, int) or len(text) <= max_response_chars, f"response too long: {len(text)} > {max_response_chars}"),
+        (isinstance(min_tool_calls, int), "expected min_tool_calls was not configured"),
+        (not isinstance(min_tool_calls, int) or response.tool_calls >= min_tool_calls, f"minimum tool calls not reached: {response.tool_calls} < {min_tool_calls}"),
+        (isinstance(max_tool_calls, int), "expected max_tool_calls was not configured"),
+        (not isinstance(max_tool_calls, int) or response.tool_calls <= max_tool_calls, f"tool call budget exceeded: {response.tool_calls} > {max_tool_calls}"),
+        (path_exists(workspace, source_file), f"source file does not exist: {source_file}"),
+        (path_exists(workspace, final_file), f"final file does not exist: {final_file}"),
+        (all(path_exists(workspace, path) for path in trail_files), "trail file does not exist"),
+    ]
+    if output is None:
+        return checks
+
+    if set(output) == {"text"}:
+        checks.append((False, "response was wrapped JSON"))
+        return checks
+
+    checks.append((set(output) == set(required_keys), "strict JSON keys did not match expected keys"))
+    for key in required_keys:
+        checks.append((output.get(key) == task.expected.get(key), f"format value did not match expected {key}"))
+    return checks
+
+
+def _strict_json_object(text: str) -> dict[str, Any] | None:
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def _uses_existing_helper(target_text: str, helper_file: str, helper_symbol: str) -> bool:
     if not target_text or not helper_symbol:
         return False
@@ -535,14 +588,22 @@ def _failure_type(task: TaskSpec, failed_notes: list[str], tests_passed: bool, h
     text = " ".join(failed_notes)
     if hallucinated:
         return "hallucinated_file"
-    if "valid JSON" in text or "not JSON" in text:
+    if "wrapped JSON" in text:
+        return "bad_json"
+    if "valid JSON" in text or "not JSON" in text or "response was not strict JSON object" in text:
         return "bad_json"
     if "tool call budget exceeded" in text:
         return "tool_loop"
+    if "minimum tool calls" in text:
+        return "incomplete_result"
     if "distractor" in text or "needle" in text:
         return "wrong_needle"
     if "behavior check failed" in text:
         return "test_failed"
+    if "response too long" in text or "strict JSON keys" in text:
+        return "instruction_violation"
+    if "format drift task changed files" in text:
+        return "instruction_violation"
     if "policy file" in text or "OpenClaw seed" in text or "changed_files missing target file" in text:
         return "instruction_violation"
     if "action gate" in text or "decision did not match" in text or "preserved file" in text:
@@ -554,6 +615,8 @@ def _failure_type(task: TaskSpec, failed_notes: list[str], tests_passed: bool, h
     if "too many files" in text or "unexpected changed files" in text:
         return "patch_unrelated"
     if "answer did not match" in text or "evidence_files missing" in text or "answer file does not exist" in text or "evidence file does not exist" in text:
+        return "wrong_file"
+    if "format value" in text or "trail file" in text or "source file" in text or "final file" in text:
         return "wrong_file"
     if "expected changed file" in text or "bug path missing expected file" in text:
         return "wrong_file"

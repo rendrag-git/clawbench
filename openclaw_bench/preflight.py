@@ -185,6 +185,29 @@ def _check_task_expected_paths(task: object, fixture: Path) -> list[PreflightChe
         else:
             checks.append(PreflightCheck(f"expected_paths:{task_id}:policy_files", "fail", "policy_files must be a list"))
         return checks
+    if task_type == "format_drift_under_length":
+        required = [
+            "decision",
+            "owner",
+            "risk_count",
+            "trail_length",
+            "checksum",
+            "final_file",
+            "source_file",
+            "trail_files",
+            "required_keys",
+            "min_tool_calls",
+            "max_tool_calls",
+            "max_response_chars",
+        ]
+        checks = [_check_required_expected_keys(task_id, expected, required)]
+        checks.extend(_check_fixture_file_refs(task_id, fixture, expected, ["source_file", "final_file"]))
+        trail_files = expected.get("trail_files")
+        if isinstance(trail_files, list):
+            checks.extend(_check_fixture_paths(task_id, fixture, trail_files, "trail_files"))
+        else:
+            checks.append(PreflightCheck(f"expected_paths:{task_id}:trail_files", "fail", "trail_files must be a list"))
+        return checks
     return []
 
 

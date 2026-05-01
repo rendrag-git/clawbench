@@ -80,11 +80,20 @@ class ManifestTests(unittest.TestCase):
                 "medium-workspace-needle-32k",
                 "medium-tool-error-recovery-route-map",
                 "medium-ambiguous-spec-triage",
+                "medium-format-drift-under-length",
             ],
         )
         self.assertEqual(
             {task.task_type for task in suite.tasks},
-            {"multi_file_bug_trace", "instruction_retention", "agents_soul_adherence", "workspace_needle", "repo_read_only", "action_gate_triage"},
+            {
+                "multi_file_bug_trace",
+                "instruction_retention",
+                "agents_soul_adherence",
+                "workspace_needle",
+                "repo_read_only",
+                "action_gate_triage",
+                "format_drift_under_length",
+            },
         )
         self.assertEqual({tuple(task.context_sizes) for task in suite.tasks if task.context_sizes}, {(16384,), (32768,)})
         self.assertTrue(all("tier-medium" in task.tags for task in suite.tasks))

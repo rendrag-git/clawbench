@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:11 UTC
+Last updated: 2026-05-02 00:27 UTC
 
 ## Runtime
 
@@ -110,6 +110,12 @@ The repo needs a full local-provider setup test suite before this is considered 
   - `tests/test_calibration.py`
   - `python3 -m unittest discover -s tests` ran `230` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-calibration-schema-verify --run-id cert-full` produced `40` attempts, `0` failures.
+- M2 format-drift slice in progress:
+  - `fixtures/format_drift_repo`
+  - `medium-format-drift-under-length`
+  - `python3 -m unittest discover -s tests` ran `235` tests.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/tier-medium.json --models simulated-model --kv fp8 --concurrency 1 --contexts 16384,32768 --out /tmp/openclaw-bench-m2-format-drift --run-id tier-medium` produced `13` attempts, `0` failures.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-format-drift-cert --run-id cert-full` produced `40` attempts, `0` failures.
 
 ## Latest E2E
 
@@ -169,7 +175,7 @@ First M2 slice in progress:
 - Added manifest and simulator smoke coverage for those suites.
 - This is not full M2 completion. Missing M2 work remains:
   - live floor/ceiling calibration records for every tier
-  - task-gap coverage for plan/action coherence and format drift after 10+ tool calls
+  - task-gap coverage for plan/action coherence
 - Added first task-gap slice:
   - `fixtures/tool_error_recovery_repo`
   - `medium-tool-error-recovery-route-map` in `manifests/tier-medium.json`
@@ -205,6 +211,11 @@ First M2 slice in progress:
   - Validates complete small/medium/large/xlarge floor and ceiling records, thresholds, date/SHA shape, and optional attempts.jsonl score cross-checking.
   - Full unit and simulator regressions pass.
   - Does not fabricate live records; actual floor/ceiling records still require live anchor data.
+- Added format-drift under length slice:
+  - `fixtures/format_drift_repo`
+  - `medium-format-drift-under-length`
+  - `format_drift_under_length` scoring enforces no edits, strict unwrapped compact JSON, exact keys/values, 10-16 tool calls, and fixture path existence.
+  - Full unit, tier-medium simulator, and certification simulator regressions pass.
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
@@ -218,5 +229,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 
 ## Open Items
 
-- Add the next M2 task-gap slice. Recommended next: format-drift under length or plan/action coherence. Live calibration records still require anchor runs.
+- Add the next M2 task-gap slice. Recommended next: plan/action coherence. Live calibration records still require anchor runs.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
