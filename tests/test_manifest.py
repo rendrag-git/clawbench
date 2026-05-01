@@ -103,9 +103,9 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(suite.suite_id, "tier-large")
         self.assertEqual(
             [task.task_id for task in suite.tasks],
-            ["large-cross-file-sale-rate", "large-workspace-needle-64k"],
+            ["large-cross-file-sale-rate", "large-plan-action-refund-window", "large-workspace-needle-64k"],
         )
-        self.assertEqual({task.task_type for task in suite.tasks}, {"cross_file_consistency", "workspace_needle"})
+        self.assertEqual({task.task_type for task in suite.tasks}, {"cross_file_consistency", "plan_action_alignment", "workspace_needle"})
         self.assertTrue(all("tier-large" in task.tags for task in suite.tasks))
 
     def test_load_tier_xlarge_suite(self):

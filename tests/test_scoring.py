@@ -527,6 +527,72 @@ class ScoringTests(unittest.TestCase):
             self.assertEqual(hallucinated, 0)
             self.assertIn("response too long", notes)
 
+    def test_plan_action_alignment_scores_simulator_patch(self):
+        suite = load_suite(ROOT / "manifests" / "tier-large.json")
+        task = next(item for item in suite.tasks if item.task_id == "large-plan-action-refund-window")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            before = snapshot_files(workspace)
+            response = SimulatorBackend().run(ModelSpec.from_alias("simulated-model", "fp8", 65536), task, workspace, "session", 60)
+            changed = changed_files(before, snapshot_files(workspace))
+            tests_passed, _ = run_verify_command(workspace, task.verify_command)
+            score, failure, hallucinated, notes = score_task(task, workspace, response, changed, tests_passed)
+            self.assertEqual(score, 1.0, notes)
+            self.assertIsNone(failure)
+            self.assertEqual(hallucinated, 0)
+
+    def test_plan_action_alignment_requires_plan_files_to_match_patch(self):
+        suite = load_suite(ROOT / "manifests" / "tier-large.json")
+        task = next(item for item in suite.tasks if item.task_id == "large-plan-action-refund-window")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            response = SimulatorBackend().run(ModelSpec.from_alias("simulated-model", "fp8", 65536), task, workspace, "session", 60)
+            assert response.json_output is not None
+            response.json_output["plan"] = {"edit_files": ["app/refunds.py"]}
+            response.text = json.dumps(response.json_output)
+            tests_passed, _ = run_verify_command(workspace, task.verify_command)
+            changed = ["app/refunds.py", "app/messages.py"]
+            score, failure, hallucinated, notes = score_task(task, workspace, response, changed, tests_passed)
+            self.assertLess(score, 1.0)
+            self.assertEqual(failure, "instruction_violation")
+            self.assertEqual(hallucinated, 0)
+            self.assertIn("plan edit_files did not match actual changed files", notes)
+
+    def test_plan_action_alignment_requires_executed_files_to_match_patch(self):
+        suite = load_suite(ROOT / "manifests" / "tier-large.json")
+        task = next(item for item in suite.tasks if item.task_id == "large-plan-action-refund-window")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            response = SimulatorBackend().run(ModelSpec.from_alias("simulated-model", "fp8", 65536), task, workspace, "session", 60)
+            assert response.json_output is not None
+            response.json_output["executed"] = {"changed_files": ["app/refunds.py"]}
+            response.text = json.dumps(response.json_output)
+            tests_passed, _ = run_verify_command(workspace, task.verify_command)
+            changed = ["app/refunds.py", "app/messages.py"]
+            score, failure, hallucinated, notes = score_task(task, workspace, response, changed, tests_passed)
+            self.assertLess(score, 1.0)
+            self.assertEqual(failure, "instruction_violation")
+            self.assertEqual(hallucinated, 0)
+            self.assertIn("executed changed_files did not match actual changed files", notes)
+
+    def test_plan_action_alignment_rejects_preserved_file_changes(self):
+        suite = load_suite(ROOT / "manifests" / "tier-large.json")
+        task = next(item for item in suite.tasks if item.task_id == "large-plan-action-refund-window")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            response = SimulatorBackend().run(ModelSpec.from_alias("simulated-model", "fp8", 65536), task, workspace, "session", 60)
+            tests_passed, _ = run_verify_command(workspace, task.verify_command)
+            changed = ["app/refunds.py", "app/messages.py", "app/audit.py"]
+            score, failure, hallucinated, notes = score_task(task, workspace, response, changed, tests_passed)
+            self.assertLess(score, 1.0)
+            self.assertEqual(failure, "instruction_violation")
+            self.assertEqual(hallucinated, 0)
+            self.assertIn("preserved file was edited", notes)
+
     def test_workspace_needle_uses_manifest_source_and_target_paths(self):
         task = TaskSpec(
             task_id="custom-needle",

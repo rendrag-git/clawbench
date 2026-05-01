@@ -404,8 +404,11 @@ class RunSmokeTests(unittest.TestCase):
                 json.loads(line)
                 for line in (run_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
             ]
-            self.assertEqual(len(attempts), 2)
-            self.assertEqual({row["task_id"] for row in attempts}, {"large-cross-file-sale-rate", "large-workspace-needle-64k"})
+            self.assertEqual(len(attempts), 3)
+            self.assertEqual(
+                {row["task_id"] for row in attempts},
+                {"large-cross-file-sale-rate", "large-plan-action-refund-window", "large-workspace-needle-64k"},
+            )
             self.assertTrue(all(row["status"] == "pass" for row in attempts))
 
     def test_tier_xlarge_simulator_run_passes(self):

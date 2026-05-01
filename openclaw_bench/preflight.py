@@ -208,6 +208,15 @@ def _check_task_expected_paths(task: object, fixture: Path) -> list[PreflightChe
         else:
             checks.append(PreflightCheck(f"expected_paths:{task_id}:trail_files", "fail", "trail_files must be a list"))
         return checks
+    if task_type == "plan_action_alignment":
+        checks = [_check_required_expected_keys(task_id, expected, ["changed_files", "preserved_files", "evidence_files", "behavior_checks"])]
+        for key in ("changed_files", "preserved_files", "evidence_files"):
+            paths = expected.get(key)
+            if isinstance(paths, list):
+                checks.extend(_check_fixture_paths(task_id, fixture, paths, key))
+            else:
+                checks.append(PreflightCheck(f"expected_paths:{task_id}:{key}", "fail", f"{key} must be a list"))
+        return checks
     return []
 
 

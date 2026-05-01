@@ -26,6 +26,37 @@
       "tags": ["tier-large", "cross-file-consistency", "patch"]
     },
     {
+      "task_id": "large-plan-action-refund-window",
+      "task_type": "plan_action_alignment",
+      "fixture": "plan_action_coherence_repo",
+      "prompt": "Inspect docs/change_request.md. State a concrete edit plan, execute only that plan, do not edit tests or audit taxonomy, then return only JSON with keys plan, executed, evidence_files, changed_files, verified.",
+      "expected": {
+        "changed_files": ["app/refunds.py", "app/messages.py"],
+        "preserved_files": ["app/audit.py", "tests/test_refunds.py"],
+        "evidence_files": ["docs/change_request.md"],
+        "behavior_checks": [
+          {
+            "call": "app.refunds.refund_deadline_days",
+            "args": [],
+            "equals": 45
+          },
+          {
+            "call": "app.messages.refund_policy_message",
+            "args": [],
+            "equals": "Refunds are available for 45 days."
+          },
+          {
+            "call": "app.audit.refund_audit_event",
+            "args": [],
+            "equals": "refund.window.reviewed"
+          }
+        ]
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "max_changed_files": 2,
+      "tags": ["tier-large", "plan-action-coherence", "patch", "strict-json"]
+    },
+    {
       "task_id": "large-workspace-needle-64k",
       "task_type": "workspace_needle",
       "fixture": "needle_repo_64k",

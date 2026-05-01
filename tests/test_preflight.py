@@ -244,6 +244,33 @@ class PreflightTests(unittest.TestCase):
             )
         )
 
+    def test_preflight_passes_plan_action_expected_paths(self):
+        suite = load_suite(ROOT / "manifests" / "tier-large.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            result = run_preflight(
+                suite=suite,
+                models=[ModelSpec.from_alias("simulated-model", "fp8", 65536)],
+                backend_name="simulator",
+                out_dir=Path(tmp) / "results",
+                workspace_root=Path(tmp) / "workspaces",
+                fixtures_root=ROOT / "fixtures",
+                openclaw_profile="bench",
+                openclaw_local=True,
+            )
+        self.assertTrue(result.ok, result.to_json())
+        self.assertTrue(
+            any(
+                check.name == "expected_paths:large-plan-action-refund-window:changed_files" and check.status == "pass"
+                for check in result.checks
+            )
+        )
+        self.assertTrue(
+            any(
+                check.name == "expected_paths:large-plan-action-refund-window:preserved_files" and check.status == "pass"
+                for check in result.checks
+            )
+        )
+
     def test_openclaw_local_preflight_does_not_require_gateway(self):
         with tempfile.TemporaryDirectory() as tmp:
             cmd = [

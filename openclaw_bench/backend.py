@@ -235,6 +235,38 @@ class SimulatorBackend(AgentBackend):
                 time_to_first_relevant_file_s=0.4,
             )
 
+        if task.task_type == "plan_action_alignment":
+            refunds = workspace / "app" / "refunds.py"
+            messages = workspace / "app" / "messages.py"
+            refunds.write_text(
+                "REFUND_WINDOW_DAYS = 45\n\n\n"
+                "def refund_deadline_days():\n"
+                "    return REFUND_WINDOW_DAYS\n",
+                encoding="utf-8",
+            )
+            messages.write_text(
+                "def refund_policy_message():\n"
+                "    return \"Refunds are available for 45 days.\"\n",
+                encoding="utf-8",
+            )
+            changed_files = ["app/refunds.py", "app/messages.py"]
+            payload = {
+                "plan": {"edit_files": changed_files},
+                "executed": {"changed_files": changed_files},
+                "evidence_files": task.expected.get("evidence_files", []),
+                "changed_files": changed_files,
+                "verified": True,
+            }
+            return BackendResponse(
+                text=json.dumps(payload),
+                json_output=payload,
+                raw={"simulated": True, "session_id": session_id},
+                tool_calls=7,
+                files_read=6,
+                duplicate_file_reads=0,
+                time_to_first_relevant_file_s=0.4,
+            )
+
         if task.task_type == "workspace_needle":
             token = _read_needle(workspace)
             health = workspace / "app" / "health.py"

@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:27 UTC
+Last updated: 2026-05-02 00:43 UTC
 
 ## Runtime
 
@@ -116,6 +116,12 @@ The repo needs a full local-provider setup test suite before this is considered 
   - `python3 -m unittest discover -s tests` ran `235` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/tier-medium.json --models simulated-model --kv fp8 --concurrency 1 --contexts 16384,32768 --out /tmp/openclaw-bench-m2-format-drift --run-id tier-medium` produced `13` attempts, `0` failures.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-format-drift-cert --run-id cert-full` produced `40` attempts, `0` failures.
+- M2 plan/action coherence slice in progress:
+  - `fixtures/plan_action_coherence_repo`
+  - `large-plan-action-refund-window`
+  - `python3 -m unittest discover -s tests` ran `240` tests.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/tier-large.json --models simulated-model --kv fp8 --concurrency 1 --contexts 65536 --out /tmp/openclaw-bench-m2-plan-action --run-id tier-large` produced `3` attempts, `0` failures.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-plan-action-cert --run-id cert-full` produced `40` attempts, `0` failures.
 
 ## Latest E2E
 
@@ -175,7 +181,7 @@ First M2 slice in progress:
 - Added manifest and simulator smoke coverage for those suites.
 - This is not full M2 completion. Missing M2 work remains:
   - live floor/ceiling calibration records for every tier
-  - task-gap coverage for plan/action coherence
+  - task-gap live discrimination data for the tier suites
 - Added first task-gap slice:
   - `fixtures/tool_error_recovery_repo`
   - `medium-tool-error-recovery-route-map` in `manifests/tier-medium.json`
@@ -217,6 +223,11 @@ First M2 slice in progress:
   - `format_drift_under_length` scoring enforces no edits, strict unwrapped compact JSON, exact keys/values, 10-16 tool calls, and fixture path existence.
   - Full unit, tier-medium simulator, and certification simulator regressions pass.
   - Committed as `f840481`.
+- Added plan/action coherence slice:
+  - `fixtures/plan_action_coherence_repo`
+  - `large-plan-action-refund-window`
+  - `plan_action_alignment` scoring enforces that final plan/executed/changed file sets match the actual patch, preserved files stay untouched, evidence files are cited, behavior checks pass, and verification passes.
+  - Full unit, tier-large simulator, and certification simulator regressions pass.
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
@@ -230,5 +241,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 
 ## Open Items
 
-- Add the next M2 task-gap slice. Recommended next: plan/action coherence. Live calibration records still require anchor runs.
+- Task-gap coverage is now present across the M2 tier manifests. Next M2 blocker: live floor/ceiling calibration records for every tier.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
