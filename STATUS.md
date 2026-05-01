@@ -116,7 +116,7 @@ The repo needs a full local-provider setup test suite before this is considered 
   - `python3 -m unittest discover -s tests` ran `235` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/tier-medium.json --models simulated-model --kv fp8 --concurrency 1 --contexts 16384,32768 --out /tmp/openclaw-bench-m2-format-drift --run-id tier-medium` produced `13` attempts, `0` failures.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-format-drift-cert --run-id cert-full` produced `40` attempts, `0` failures.
-- M2 plan/action coherence slice in progress:
+- M2 plan/action coherence slice committed as `3643f1b`:
   - `fixtures/plan_action_coherence_repo`
   - `large-plan-action-refund-window`
   - `python3 -m unittest discover -s tests` ran `240` tests.
@@ -228,6 +228,7 @@ First M2 slice in progress:
   - `large-plan-action-refund-window`
   - `plan_action_alignment` scoring enforces that final plan/executed/changed file sets match the actual patch, preserved files stay untouched, evidence files are cited, behavior checks pass, and verification passes.
   - Full unit, tier-large simulator, and certification simulator regressions pass.
+  - Committed as `3643f1b`.
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
