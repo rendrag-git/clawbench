@@ -13,7 +13,7 @@ from pathlib import Path
 from .backend import OpenClawBackend
 from .container import DEFAULT_GATEWAY_PORT, gateway_run_command
 from .models import ModelSpec, SuiteManifest, TaskSpec
-from .workspace import copy_fixture, seed_openclaw_workspace_files
+from .workspace import OPENCLAW_SEED_FILES, copy_fixture, seed_openclaw_workspace_files
 
 
 OPENCLAW_PINNED_VERSION = "2026.4.27"
@@ -174,6 +174,16 @@ def _check_task_expected_paths(task: object, fixture: Path) -> list[PreflightChe
             checks.extend(_check_fixture_paths(task_id, fixture, preserved_files, "preserved_files"))
         else:
             checks.append(PreflightCheck(f"expected_paths:{task_id}:preserved_files", "fail", "preserved_files must be a list"))
+        return checks
+    if task_type == "agents_soul_adherence":
+        checks = [_check_required_expected_keys(task_id, expected, ["changed_files", "target_file", "policy_files", "forbidden_changed_files", "behavior_checks"])]
+        checks.extend(_check_fixture_file_refs(task_id, fixture, expected, ["target_file"]))
+        policy_files = expected.get("policy_files")
+        if isinstance(policy_files, list):
+            fixture_policy_files = [path for path in policy_files if path not in OPENCLAW_SEED_FILES]
+            checks.extend(_check_fixture_paths(task_id, fixture, fixture_policy_files, "policy_files"))
+        else:
+            checks.append(PreflightCheck(f"expected_paths:{task_id}:policy_files", "fail", "policy_files must be a list"))
         return checks
     return []
 

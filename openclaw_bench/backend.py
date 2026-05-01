@@ -268,6 +268,30 @@ class SimulatorBackend(AgentBackend):
                 time_to_first_relevant_file_s=0.3,
             )
 
+        if task.task_type == "agents_soul_adherence":
+            target = workspace / "app" / "context.py"
+            target.write_text(
+                "def agent_traits():\n"
+                "    return [\"quiet\", \"evidence-seeking\", \"practical\"]\n\n\n"
+                "def task_policy():\n"
+                "    return {\"onboarded\": True, \"json_only\": True}\n",
+                encoding="utf-8",
+            )
+            payload = {
+                "evidence_files": ["AGENTS.md", "SOUL.md"],
+                "changed_files": ["app/context.py"],
+                "verified": True,
+            }
+            return BackendResponse(
+                text=json.dumps(payload),
+                json_output=payload,
+                raw={"simulated": True, "session_id": session_id},
+                tool_calls=5,
+                files_read=5,
+                duplicate_file_reads=0,
+                time_to_first_relevant_file_s=0.3,
+            )
+
         if task.task_type == "action_gate_triage":
             max_tool_calls = task.expected.get("max_tool_calls")
             tool_calls = min(3, max_tool_calls) if isinstance(max_tool_calls, int) else 3

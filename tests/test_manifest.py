@@ -75,6 +75,7 @@ class ManifestTests(unittest.TestCase):
             [
                 "medium-multi-file-bug-trace",
                 "medium-instruction-retention",
+                "medium-agents-soul-adherence",
                 "medium-workspace-needle-16k",
                 "medium-workspace-needle-32k",
                 "medium-tool-error-recovery-route-map",
@@ -83,7 +84,7 @@ class ManifestTests(unittest.TestCase):
         )
         self.assertEqual(
             {task.task_type for task in suite.tasks},
-            {"multi_file_bug_trace", "instruction_retention", "workspace_needle", "repo_read_only", "action_gate_triage"},
+            {"multi_file_bug_trace", "instruction_retention", "agents_soul_adherence", "workspace_needle", "repo_read_only", "action_gate_triage"},
         )
         self.assertEqual({tuple(task.context_sizes) for task in suite.tasks if task.context_sizes}, {(16384,), (32768,)})
         self.assertTrue(all("tier-medium" in task.tags for task in suite.tasks))

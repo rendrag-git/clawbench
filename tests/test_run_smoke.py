@@ -356,12 +356,13 @@ class RunSmokeTests(unittest.TestCase):
                 json.loads(line)
                 for line in (run_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
             ]
-            self.assertEqual(len(attempts), 10)
+            self.assertEqual(len(attempts), 12)
             self.assertEqual(
                 {row["task_id"] for row in attempts},
                 {
                     "medium-multi-file-bug-trace",
                     "medium-instruction-retention",
+                    "medium-agents-soul-adherence",
                     "medium-workspace-needle-16k",
                     "medium-workspace-needle-32k",
                     "medium-tool-error-recovery-route-map",

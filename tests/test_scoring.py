@@ -7,7 +7,7 @@ from openclaw_bench.backend import SimulatorBackend
 from openclaw_bench.manifest import load_suite
 from openclaw_bench.models import BackendResponse, ModelSpec, TaskSpec
 from openclaw_bench.scoring import run_verify_command, score_task
-from openclaw_bench.workspace import changed_files, copy_fixture, snapshot_files
+from openclaw_bench.workspace import changed_files, copy_fixture, seed_openclaw_workspace_files, snapshot_files
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -391,6 +391,68 @@ class ScoringTests(unittest.TestCase):
             self.assertEqual(failure, "instruction_violation")
             self.assertEqual(hallucinated, 0)
             self.assertIn("action gate changed files: app/service.py", notes)
+
+    def test_agents_soul_adherence_scores_simulator_patch(self):
+        suite = load_suite(ROOT / "manifests" / "tier-medium.json")
+        task = next(item for item in suite.tasks if item.task_id == "medium-agents-soul-adherence")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            seed_openclaw_workspace_files(workspace, task_id=task.task_id, model_id="simulated-model")
+            before = snapshot_files(workspace)
+            response = SimulatorBackend().run(ModelSpec.from_alias("simulated-model", "fp8", 16384), task, workspace, "session", 60)
+            changed = changed_files(before, snapshot_files(workspace))
+            tests_passed, _ = run_verify_command(workspace, task.verify_command)
+            score, failure, hallucinated, notes = score_task(task, workspace, response, changed, tests_passed)
+            self.assertEqual(score, 1.0, notes)
+            self.assertIsNone(failure)
+            self.assertEqual(hallucinated, 0)
+
+    def test_agents_soul_adherence_requires_policy_evidence(self):
+        suite = load_suite(ROOT / "manifests" / "tier-medium.json")
+        task = next(item for item in suite.tasks if item.task_id == "medium-agents-soul-adherence")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            seed_openclaw_workspace_files(workspace, task_id=task.task_id, model_id="simulated-model")
+            (workspace / "app" / "context.py").write_text(
+                "def agent_traits():\n"
+                "    return [\"quiet\", \"evidence-seeking\", \"practical\"]\n\n\n"
+                "def task_policy():\n"
+                "    return {\"onboarded\": True, \"json_only\": True}\n",
+                encoding="utf-8",
+            )
+            payload = {"evidence_files": ["AGENTS.md"], "changed_files": ["app/context.py"], "verified": True}
+            response = BackendResponse(text=json.dumps(payload), json_output=payload, raw={})
+            tests_passed, _ = run_verify_command(workspace, task.verify_command)
+            score, failure, hallucinated, notes = score_task(task, workspace, response, ["app/context.py"], tests_passed)
+            self.assertLess(score, 1.0)
+            self.assertEqual(failure, "instruction_violation")
+            self.assertEqual(hallucinated, 0)
+            self.assertIn("evidence_files missing policy file", notes)
+
+    def test_agents_soul_adherence_rejects_seed_file_changes(self):
+        suite = load_suite(ROOT / "manifests" / "tier-medium.json")
+        task = next(item for item in suite.tasks if item.task_id == "medium-agents-soul-adherence")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            seed_openclaw_workspace_files(workspace, task_id=task.task_id, model_id="simulated-model")
+            (workspace / "app" / "context.py").write_text(
+                "def agent_traits():\n"
+                "    return [\"quiet\", \"evidence-seeking\", \"practical\"]\n\n\n"
+                "def task_policy():\n"
+                "    return {\"onboarded\": True, \"json_only\": True}\n",
+                encoding="utf-8",
+            )
+            payload = {"evidence_files": ["AGENTS.md", "SOUL.md"], "changed_files": ["app/context.py"], "verified": True}
+            response = BackendResponse(text=json.dumps(payload), json_output=payload, raw={})
+            tests_passed, _ = run_verify_command(workspace, task.verify_command)
+            score, failure, hallucinated, notes = score_task(task, workspace, response, ["app/context.py", "AGENTS.md"], tests_passed)
+            self.assertLess(score, 1.0)
+            self.assertEqual(failure, "instruction_violation")
+            self.assertEqual(hallucinated, 0)
+            self.assertIn("forbidden OpenClaw seed file was edited", notes)
 
     def test_workspace_needle_uses_manifest_source_and_target_paths(self):
         task = TaskSpec(

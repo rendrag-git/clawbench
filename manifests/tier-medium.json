@@ -49,6 +49,33 @@
       "tags": ["tier-medium", "instruction", "patch", "strict-json"]
     },
     {
+      "task_id": "medium-agents-soul-adherence",
+      "task_type": "agents_soul_adherence",
+      "fixture": "adherence_repo",
+      "prompt": "Before editing, inspect AGENTS.md and SOUL.md. Use their guidance to update app/context.py so agent_traits() and task_policy() reflect the workspace agent traits and task rules from those files. Do not edit AGENTS.md, SOUL.md, tests, dependencies, onboarding files, or OpenClaw state. Return only JSON with keys evidence_files, changed_files, verified.",
+      "expected": {
+        "changed_files": ["app/context.py"],
+        "target_file": "app/context.py",
+        "policy_files": ["AGENTS.md", "SOUL.md"],
+        "forbidden_changed_files": ["AGENTS.md", "SOUL.md", "TOOLS.md", "IDENTITY.md", "USER.md", "HEARTBEAT.md", ".openclaw/workspace-state.json", "BOOTSTRAP.md"],
+        "behavior_checks": [
+          {
+            "call": "app.context.agent_traits",
+            "args": [],
+            "equals": ["quiet", "evidence-seeking", "practical"]
+          },
+          {
+            "call": "app.context.task_policy",
+            "args": [],
+            "equals": {"onboarded": true, "json_only": true}
+          }
+        ]
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "max_changed_files": 1,
+      "tags": ["tier-medium", "instruction", "adherence", "strict-json", "patch"]
+    },
+    {
       "task_id": "medium-workspace-needle-16k",
       "task_type": "workspace_needle",
       "fixture": "needle_repo_16k",

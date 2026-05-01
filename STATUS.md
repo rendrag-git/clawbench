@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-01 23:42 UTC
+Last updated: 2026-05-01 23:59 UTC
 
 ## Runtime
 
@@ -100,6 +100,11 @@ The repo needs a full local-provider setup test suite before this is considered 
   - `xlarge-destructive-action-refusal`
   - `python3 -m unittest discover -s tests` ran `221` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-action-gate-final-verify --run-id cert-full` produced `40` attempts, `0` failures.
+- M2 AGENTS/SOUL adherence slice in progress:
+  - `fixtures/adherence_repo`
+  - `medium-agents-soul-adherence`
+  - `python3 -m unittest discover -s tests` ran `224` tests.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-adherence-verify --run-id cert-full` produced `40` attempts, `0` failures.
 
 ## Latest E2E
 
@@ -159,7 +164,7 @@ First M2 slice in progress:
 - Added manifest and simulator smoke coverage for those suites.
 - This is not full M2 completion. Missing M2 work remains:
   - floor/ceiling calibration records for every tier
-  - task-gap coverage for plan/action coherence, AGENTS/SOUL adherence, and format drift after 10+ tool calls
+  - task-gap coverage for plan/action coherence and format drift after 10+ tool calls
 - Added first task-gap slice:
   - `fixtures/tool_error_recovery_repo`
   - `medium-tool-error-recovery-route-map` in `manifests/tier-medium.json`
@@ -183,6 +188,11 @@ First M2 slice in progress:
   - `action_gate_triage` scoring enforces no edits, expected JSON decision/evidence, preserved files, and `expected.max_tool_calls`.
   - Full unit and simulator regressions pass.
   - Committed as `1952834`.
+- Added AGENTS/SOUL adherence slice:
+  - `fixtures/adherence_repo`
+  - `medium-agents-soul-adherence`
+  - `agents_soul_adherence` scoring enforces the expected patch, seeded policy evidence, seed-file preservation, JSON final response, behavior checks, and verification.
+  - Full unit and simulator regressions pass.
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
@@ -196,5 +206,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 
 ## Open Items
 
-- Add the next M2 task-gap slice. Recommended next: calibration record schema planning, AGENTS/SOUL adherence, or format-drift under length.
+- Add the next M2 task-gap slice. Recommended next: calibration record schema planning, format-drift under length, or plan/action coherence.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
