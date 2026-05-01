@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:43 UTC
+Last updated: 2026-05-01 23:53 UTC
 
 ## Runtime
 
@@ -125,6 +125,25 @@ The repo needs a full local-provider setup test suite before this is considered 
 
 ## Latest E2E
 
+M2 live calibration candidate in progress:
+
+- Purpose: small-tier floor candidate for `qwen3.5-4b`; this may also provide live discrimination evidence for later calibration analysis.
+- Run id: `live-m2-small-floor-qwen35-20260501235026`
+- Code commit: `feb6142`
+- Runtime: `oc-stack`, OpenClaw `2026.4.27`
+- Suite: `manifests/tier-small.json`
+- Model config: `/tmp/oc-bench-root-m2-calib-20260501235026/manifests/starter-models.json`
+- Model: `qwen3.5-4b`
+- KV mode: `provider_default`
+- Context: `32768`
+- Concurrency: `1`
+- Isolated profile: `benchclaw-m2-calib-20260501235026`
+- Staged repo: `/tmp/openclaw-local-model-bench-m2-calib-20260501235026`
+- Result directory: `/tmp/oc-bench-root-m2-calib-20260501235026/results/live-m2-small-floor-qwen35-20260501235026`
+- Log: `/tmp/live-m2-small-floor-qwen35-20260501235026.log`
+- Process: parent shell PID `119185`, benchmark Python PID `119186`
+- Preflight: pass.
+
 Latest staged repo:
 
 ```text
@@ -243,4 +262,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 ## Open Items
 
 - Task-gap coverage is now present across the M2 tier manifests. Next M2 blocker: live floor/ceiling calibration records for every tier.
+- Poll `live-m2-small-floor-qwen35-20260501235026`; if it completes, record score/pass rate and convert it into the small-floor calibration record if it meets the floor threshold.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
