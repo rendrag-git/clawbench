@@ -18,7 +18,7 @@ from .reporting import write_reports
 from .scoring import json_valid, run_verify_command, score_task
 from .serve import serve_model
 from .telemetry import GpuTelemetrySampler, apply_gpu_telemetry, sample_nvidia_smi
-from .workspace import changed_files, copy_fixture, read_text_files, snapshot_files
+from .workspace import changed_files, copy_fixture, read_text_files, seed_openclaw_workspace_files, snapshot_files
 
 
 @dataclass(frozen=True)
@@ -258,6 +258,12 @@ class BenchmarkRunner:
         workspace = config.workspace_root / workspace_id
         fixture = config.fixtures_root / task.fixture
         copy_fixture(fixture, workspace)
+        seed_openclaw_workspace_files(
+            workspace,
+            agent_id=f"{config.openclaw_agent}-{worker_index:03d}",
+            task_id=task.task_id,
+            model_id=model.served_model_name,
+        )
         before_hashes = snapshot_files(workspace)
         before_text = read_text_files(workspace)
         session_id = _session_id(config.run_id, workspace_id, worker_index, task)

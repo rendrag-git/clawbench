@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from .backend import make_backend
 from .container import DEFAULT_GATEWAY_PORT, DEFAULT_OPENCLAW_IMAGE, ensure_openclaw_container
 from .manifest import load_model_manifest_scope, load_model_specs, load_suite
 from .models import ModelSpec
-from .preflight import PreflightCheck, ensure_openclaw_gateway, render_text, run_preflight
+from .preflight import PreflightCheck, check_openclaw_version, ensure_openclaw_gateway, render_text, run_preflight
 from .quickstart import (
     DEFAULT_AGENT,
     DEFAULT_PROFILE,
@@ -168,6 +169,10 @@ def _add_quickstart_init_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--openclaw-profile", default=DEFAULT_PROFILE)
     parser.add_argument("--openclaw-agent", default=DEFAULT_AGENT)
     parser.add_argument("--gateway-port", type=int, help="Gateway port for the isolated benchclaw profile")
+    parser.add_argument("--vllm-base-url", help="OpenAI-compatible vLLM API base URL for local-provider quickstart")
+    parser.add_argument("--vllm-model", help="Served model name exposed by the vLLM API")
+    parser.add_argument("--vllm-context", type=int, default=32768, help="Context window to record for the external vLLM endpoint")
+    parser.add_argument("--vllm-max-tokens", type=int, default=256, help="Max output tokens to configure for the vLLM route")
     parser.add_argument("--force", action="store_true", help="Overwrite the generated isolated benchclaw config")
     parser.add_argument("--no-validate", action="store_true", help="Write files without running openclaw config validate")
 
@@ -189,6 +194,10 @@ def init_command(args: argparse.Namespace) -> int:
         port=args.gateway_port,
         force=args.force,
         validate=not args.no_validate,
+        vllm_base_url=args.vllm_base_url,
+        vllm_model=args.vllm_model,
+        vllm_context=args.vllm_context,
+        vllm_max_tokens=args.vllm_max_tokens,
     )
     print(f"profile={result.profile}")
     print(f"providers={result.providers}")
@@ -197,6 +206,9 @@ def init_command(args: argparse.Namespace) -> int:
     print(f"suite={result.paths.suite_path}")
     print(f"model_config={result.paths.model_config_path}")
     print(f"results={result.paths.results_root}")
+    if result.providers in {"local", "both"}:
+        print(f"vllm_base_url={result.vllm.base_url}")
+        print(f"vllm_model={result.vllm.model}")
     if result.existing_profiles:
         print(f"existing_profiles={','.join(result.existing_profiles)}")
     if result.validation is not None:
@@ -230,6 +242,10 @@ def quickstart_command(args: argparse.Namespace) -> int:
         force=args.force,
         reuse_existing=True,
         validate=not args.no_validate,
+        vllm_base_url=args.vllm_base_url,
+        vllm_model=args.vllm_model,
+        vllm_context=args.vllm_context,
+        vllm_max_tokens=args.vllm_max_tokens,
     )
     print(f"profile={init_result.profile}")
     print(f"config={init_result.paths.config_path}")
@@ -238,6 +254,7 @@ def quickstart_command(args: argparse.Namespace) -> int:
     started = False
     run_code = 1
     try:
+        _prepare_quickstart_env(providers)
         if args.backend == "openclaw":
             start_check = start_benchclaw_gateway(args.openclaw_profile, timeout_s=args.openclaw_gateway_timeout)
             print(f"{start_check.name}={start_check.status} {start_check.notes}")
@@ -295,6 +312,11 @@ def _quickstart_preflight_namespace(args: argparse.Namespace, common: dict[str, 
     )
 
 
+def _prepare_quickstart_env(providers: str) -> None:
+    if providers in {"local", "both"}:
+        os.environ.setdefault("VLLM_API_KEY", "vllm-local")
+
+
 def _quickstart_run_namespace(args: argparse.Namespace, common: dict[str, str]) -> argparse.Namespace:
     model_config = None if args.backend == "simulator" else common["model_config"]
     return argparse.Namespace(
@@ -303,7 +325,7 @@ def _quickstart_run_namespace(args: argparse.Namespace, common: dict[str, str]) 
         model_config=model_config,
         kv=None,
         concurrency="1",
-        contexts="4096",
+        contexts=None,
         out=common["out"],
         workspace_root=common["workspace_root"],
         fixtures_root=common["fixtures_root"],
@@ -400,6 +422,9 @@ def _workspace_agents_enabled(args: argparse.Namespace) -> bool:
 def _ensure_gateway_for_run(args: argparse.Namespace) -> dict[str, str] | None:
     if args.backend != "openclaw" or args.openclaw_local or not args.ensure_openclaw_gateway:
         return None
+    version = check_openclaw_version(args.openclaw_container)
+    if version.status == "fail":
+        raise ValueError(version.notes)
     check = ensure_openclaw_gateway(args.openclaw_profile, args.openclaw_container, timeout_s=args.openclaw_gateway_timeout)
     if check.status == "fail":
         raise ValueError(f"OpenClaw gateway is not ready: {check.notes}")

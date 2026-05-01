@@ -8,12 +8,28 @@ from unittest.mock import patch
 
 from openclaw_bench.manifest import load_suite
 from openclaw_bench.models import BackendResponse, ModelSpec
-from openclaw_bench.preflight import _check_gateway, ensure_openclaw_gateway, run_preflight
+from openclaw_bench.preflight import (
+    OPENCLAW_PINNED_VERSION,
+    _check_gateway,
+    check_openclaw_version,
+    ensure_openclaw_gateway,
+    run_preflight,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 class PreflightTests(unittest.TestCase):
+    def setUp(self):
+        self.version_patcher = patch(
+            "openclaw_bench.preflight.check_openclaw_version",
+            return_value=_version_check(),
+        )
+        self.version_patcher.start()
+
+    def tearDown(self):
+        self.version_patcher.stop()
+
     def test_simulator_preflight_passes_for_core_suite(self):
         with tempfile.TemporaryDirectory() as tmp:
             cmd = [
@@ -226,29 +242,36 @@ class PreflightTests(unittest.TestCase):
 
     def test_ensure_gateway_starts_bench_profile_when_probe_fails(self):
         failed = subprocess.CompletedProcess(args=[], returncode=0, stdout="Connectivity probe: failed\n", stderr="")
-        started = subprocess.CompletedProcess(args=[], returncode=0, stdout="started\n", stderr="")
         running = subprocess.CompletedProcess(args=[], returncode=0, stdout="Connectivity probe: ok\n", stderr="")
-        with patch("subprocess.run", side_effect=[failed, started, running]) as run_mock:
-            check = ensure_openclaw_gateway("bench")
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("openclaw_bench.preflight._gateway_pid_path", return_value=Path(tmp) / "gateway.pid"):
+                with patch("subprocess.Popen") as popen_mock:
+                    popen_mock.return_value.pid = 1234
+                    with patch("subprocess.run", side_effect=[failed, running]) as run_mock:
+                        check = ensure_openclaw_gateway("bench")
 
         self.assertEqual(check.status, "pass")
         calls = [call.args[0] for call in run_mock.call_args_list]
         self.assertEqual(calls[0], ["openclaw", "--profile", "bench", "gateway", "status"])
-        self.assertEqual(calls[1], ["openclaw", "--profile", "bench", "gateway", "--dev", "--verbose", "start"])
-        self.assertEqual(calls[2], ["openclaw", "--profile", "bench", "gateway", "status"])
+        self.assertEqual(calls[1], ["openclaw", "--profile", "bench", "gateway", "status"])
+        popen_mock.assert_called_once()
+        self.assertEqual(popen_mock.call_args.args[0], ["openclaw", "--profile", "bench", "gateway", "--dev", "--verbose", "run"])
         self.assertIn("started bench gateway", check.notes)
 
     def test_ensure_gateway_polls_until_started(self):
         failed = subprocess.CompletedProcess(args=[], returncode=0, stdout="Connectivity probe: failed\n", stderr="")
-        started = subprocess.CompletedProcess(args=[], returncode=0, stdout="started\n", stderr="")
         running = subprocess.CompletedProcess(args=[], returncode=0, stdout="Connectivity probe: ok\n", stderr="")
-        with patch("subprocess.run", side_effect=[failed, started, failed, running]) as run_mock:
-            with patch("time.sleep") as sleep_mock:
-                check = ensure_openclaw_gateway("bench", timeout_s=2)
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("openclaw_bench.preflight._gateway_pid_path", return_value=Path(tmp) / "gateway.pid"):
+                with patch("subprocess.Popen") as popen_mock:
+                    popen_mock.return_value.pid = 1234
+                    with patch("subprocess.run", side_effect=[failed, failed, running]) as run_mock:
+                        with patch("time.sleep") as sleep_mock:
+                            check = ensure_openclaw_gateway("bench", timeout_s=2)
 
         self.assertEqual(check.status, "pass")
         sleep_mock.assert_called_once_with(1)
-        self.assertEqual(len(run_mock.call_args_list), 4)
+        self.assertEqual(len(run_mock.call_args_list), 3)
 
     def test_ensure_gateway_respects_openclaw_container(self):
         failed = subprocess.CompletedProcess(args=[], returncode=0, stdout="Connectivity probe: failed\n", stderr="")
@@ -812,6 +835,28 @@ class PreflightTests(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertFalse(run_mock.called)
         self.assertTrue(any(check.name.startswith("openclaw_route:") and check.status == "warn" for check in result.checks))
+
+
+class OpenClawVersionTests(unittest.TestCase):
+    def test_pinned_openclaw_version_passes(self):
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=f"OpenClaw {OPENCLAW_PINNED_VERSION} (abc123)\n", stderr="")
+        with patch("subprocess.run", return_value=completed):
+            check = check_openclaw_version()
+        self.assertEqual(check.status, "pass")
+
+    def test_openclaw_429_is_blocked(self):
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="OpenClaw 2026.4.29 (abc123)\n", stderr="")
+        with patch("subprocess.run", return_value=completed):
+            check = check_openclaw_version()
+        self.assertEqual(check.status, "fail")
+        self.assertIn("2026.4.27", check.notes)
+        self.assertIn("2026.4.29", check.notes)
+
+
+def _version_check(status: str = "pass", notes: str = "OpenClaw 2026.4.27 matches pinned version 2026.4.27"):
+    from openclaw_bench.preflight import PreflightCheck
+
+    return PreflightCheck("openclaw_version", status, notes)
 
 
 if __name__ == "__main__":

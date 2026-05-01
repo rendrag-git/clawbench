@@ -70,6 +70,21 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(response.duplicate_file_reads, 1)
         self.assertEqual(response.time_to_first_relevant_file_s, 1.25)
 
+    def test_openclaw_agent_json_envelope_is_normalized_to_final_assistant_answer(self):
+        stdout = (
+            '{"runId":"run-1","status":"ok","result":{"payloads":[{"text":"working..."}],'
+            '"meta":{"finalAssistantVisibleText":"{\\"test_command\\":\\"python -m unittest discover -s tests\\",'
+            '\\"routes_file\\":\\"api/routes.py\\",\\"schema_file\\":\\"db/schema.py\\"}",'
+            '"toolSummary":{"calls":5,"tools":["read"]}}}}'
+        )
+        with patch("subprocess.Popen", return_value=_FakeProcess(returncode=0, stdout=stdout, stderr="")):
+            response = _run_openclaw_command(["openclaw"], None, timeout_s=1, default_error="unknown")
+        self.assertIsNone(response.error)
+        self.assertEqual(response.text, '{"test_command":"python -m unittest discover -s tests","routes_file":"api/routes.py","schema_file":"db/schema.py"}')
+        self.assertEqual(response.json_output["routes_file"], "api/routes.py")
+        self.assertEqual(response.tool_calls, 5)
+        self.assertEqual(response.files_read, 5)
+
     def test_openclaw_container_smoke_uses_docker_exec(self):
         backend = OpenClawBackend(profile="bench", container="oc-bench-gateway")
         model = ModelSpec(model_id="model", served_model_name="provider/model")
@@ -160,10 +175,25 @@ class BackendTests(unittest.TestCase):
         self.assertIn(str(workspace), add_cmd)
         self.assertIn("--model", add_cmd)
         self.assertIn("vllm/served", add_cmd)
+        self.assertEqual(run_mock.call_args.kwargs["timeout"], 30)
         agent_cmd = popen_mock.call_args.args[0]
         self.assertIn("--agent", agent_cmd)
         self.assertIn("bench-run-w000-task-abcdef", agent_cmd)
         self.assertNotIn("--model", agent_cmd)
+
+    def test_workspace_agent_setup_uses_attempt_timeout_without_sixty_second_cap(self):
+        backend = OpenClawBackend(profile="bench", workspace_agents=True)
+        model = ModelSpec(model_id="model", served_model_name="served", openclaw_model_name="vllm/served")
+        task = _Task()
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            workspace.mkdir()
+            completed = subprocess.CompletedProcess(args=[], returncode=0, stdout='{"ok":true}', stderr="")
+            with patch("subprocess.run", return_value=completed) as run_mock:
+                with patch("subprocess.Popen", return_value=_FakeProcess(returncode=0, stdout='{"text":"ok"}', stderr="")):
+                    response = backend.run(model, task, workspace, "run-w000-task-abcdef", timeout_s=600)
+        self.assertIsNone(response.error)
+        self.assertEqual(run_mock.call_args.kwargs["timeout"], 600)
 
     def test_openclaw_container_agent_run_sets_container_workdir(self):
         backend = OpenClawBackend(profile="bench", container="oc-bench-gateway")

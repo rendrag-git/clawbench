@@ -71,7 +71,7 @@ class OpenClawBackend(AgentBackend):
                 agent,
                 workspace,
                 model.openclaw_route_model,
-                timeout_s=min(timeout_s, 60),
+                timeout_s=timeout_s,
                 container=self.container,
             )
             if setup is not None:
@@ -357,6 +357,7 @@ def _run_openclaw_command(cmd: list[str], cwd: Path | None, timeout_s: int, defa
 
     parsed = _parse_json_object(stdout)
     text = _extract_text(parsed) if parsed else stdout
+    json_output = _extract_json_output(parsed, text) if parsed else None
     error = _classify_openclaw_error(stdout, stderr, "") or _classify_parsed_openclaw_error(parsed) or None
     if proc.returncode != 0 and not error:
         error = default_error
@@ -365,7 +366,7 @@ def _run_openclaw_command(cmd: list[str], cwd: Path | None, timeout_s: int, defa
         request_errors = max(1, request_errors)
     return BackendResponse(
         text=text,
-        json_output=parsed if isinstance(parsed, dict) else None,
+        json_output=json_output,
         raw={"cmd": cmd, "returncode": proc.returncode, "stdout": stdout, "stderr": stderr},
         tool_calls=_extract_int(parsed, "tool_calls") if parsed else 0,
         files_read=_extract_int(parsed, "files_read") if parsed else 0,
@@ -424,11 +425,58 @@ def _as_text(value: object) -> str:
 
 
 def _extract_text(parsed: dict) -> str:
+    meta = _result_meta(parsed)
+    if meta:
+        for key in ("finalAssistantVisibleText", "finalAssistantRawText"):
+            value = meta.get(key)
+            if isinstance(value, str):
+                return value
+    payloads = _result_payloads(parsed)
+    if payloads:
+        for payload in reversed(payloads):
+            if isinstance(payload, dict) and isinstance(payload.get("text"), str):
+                return payload["text"]
     for key in ("text", "message", "output", "final", "response"):
         value = parsed.get(key)
         if isinstance(value, str):
             return value
     return json.dumps(parsed, sort_keys=True)
+
+
+def _extract_json_output(parsed: dict, text: str) -> dict | None:
+    text_json = _parse_json_object(text)
+    if text_json is not None:
+        return text_json
+    if _is_openclaw_envelope(parsed):
+        return None
+    return parsed
+
+
+def _is_openclaw_envelope(parsed: dict) -> bool:
+    return isinstance(parsed.get("result"), dict) or ("runId" in parsed and "status" in parsed)
+
+
+def _result_dict(parsed: dict) -> dict:
+    result = parsed.get("result")
+    return result if isinstance(result, dict) else {}
+
+
+def _result_meta(parsed: dict) -> dict:
+    result = _result_dict(parsed)
+    meta = result.get("meta")
+    if isinstance(meta, dict):
+        return meta
+    meta = parsed.get("meta")
+    return meta if isinstance(meta, dict) else {}
+
+
+def _result_payloads(parsed: dict) -> list[object]:
+    result = _result_dict(parsed)
+    payloads = result.get("payloads")
+    if isinstance(payloads, list):
+        return payloads
+    payloads = parsed.get("payloads")
+    return payloads if isinstance(payloads, list) else []
 
 
 def _classify_openclaw_error(stdout: str, stderr: str, default_error: str = "unknown") -> str:
@@ -459,8 +507,8 @@ def _classify_openclaw_error(stdout: str, stderr: str, default_error: str = "unk
 def _classify_parsed_openclaw_error(parsed: dict | None) -> str:
     if not isinstance(parsed, dict):
         return ""
-    meta = parsed.get("meta")
-    if isinstance(meta, dict):
+    meta = _result_meta(parsed)
+    if meta:
         error = meta.get("error")
         if isinstance(error, dict):
             error_text = "\n".join(str(value) for value in (error.get("kind"), error.get("message")) if value)
@@ -469,8 +517,8 @@ def _classify_parsed_openclaw_error(parsed: dict | None) -> str:
                 return classified
         if meta.get("fallbackFrom") == "gateway":
             return "openclaw_embedded_fallback"
-    payloads = parsed.get("payloads")
-    if isinstance(payloads, list):
+    payloads = _result_payloads(parsed)
+    if payloads:
         payload_text = "\n".join(
             str(payload.get("text"))
             for payload in payloads
@@ -506,9 +554,14 @@ def _extract_int(parsed: dict, key: str) -> int:
     value = parsed.get(key)
     if isinstance(value, int):
         return value
-    metrics = parsed.get("metrics")
-    if isinstance(metrics, dict) and isinstance(metrics.get(key), int):
-        return metrics[key]
+    for metrics in _metric_dicts(parsed):
+        if isinstance(metrics.get(key), int):
+            return metrics[key]
+    tool_summary = _tool_summary(parsed)
+    if key == "tool_calls" and isinstance(tool_summary.get("calls"), int):
+        return tool_summary["calls"]
+    if key == "files_read" and _tool_summary_is_read_only(tool_summary):
+        return tool_summary["calls"]
     return 0
 
 
@@ -516,9 +569,9 @@ def _extract_float(parsed: dict, key: str) -> float | None:
     value = parsed.get(key)
     if isinstance(value, (int, float)):
         return float(value)
-    metrics = parsed.get("metrics")
-    if isinstance(metrics, dict) and isinstance(metrics.get(key), (int, float)):
-        return float(metrics[key])
+    for metrics in _metric_dicts(parsed):
+        if isinstance(metrics.get(key), (int, float)):
+            return float(metrics[key])
     return None
 
 
@@ -536,9 +589,9 @@ def _extract_optional_int(parsed: dict, key: str) -> int | None:
     value = parsed.get(key)
     if isinstance(value, int):
         return value
-    metrics = parsed.get("metrics")
-    if isinstance(metrics, dict) and isinstance(metrics.get(key), int):
-        return metrics[key]
+    for metrics in _metric_dicts(parsed):
+        if isinstance(metrics.get(key), int):
+            return metrics[key]
     return None
 
 
@@ -548,8 +601,7 @@ def _extract_file_read_paths(parsed: dict) -> list[str]:
         parsed.get("files_read_paths"),
         parsed.get("read_files"),
     ]
-    metrics = parsed.get("metrics")
-    if isinstance(metrics, dict):
+    for metrics in _metric_dicts(parsed):
         candidates.extend([metrics.get("file_reads"), metrics.get("files_read_paths"), metrics.get("read_files")])
     paths: list[str] = []
     for candidate in candidates:
@@ -560,6 +612,22 @@ def _extract_file_read_paths(parsed: dict) -> list[str]:
                 elif isinstance(item, dict) and isinstance(item.get("path"), str):
                     paths.append(item["path"])
     return paths
+
+
+def _metric_dicts(parsed: dict) -> list[dict]:
+    candidates = [parsed.get("metrics"), _result_dict(parsed).get("metrics"), _result_meta(parsed).get("metrics")]
+    return [candidate for candidate in candidates if isinstance(candidate, dict)]
+
+
+def _tool_summary(parsed: dict) -> dict:
+    summary = _result_meta(parsed).get("toolSummary")
+    return summary if isinstance(summary, dict) else {}
+
+
+def _tool_summary_is_read_only(summary: dict) -> bool:
+    calls = summary.get("calls")
+    tools = summary.get("tools")
+    return isinstance(calls, int) and calls > 0 and tools == ["read"]
 
 
 def _read_needle(workspace: Path) -> str:

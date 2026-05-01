@@ -21,6 +21,16 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class RunSmokeTests(unittest.TestCase):
+    def setUp(self):
+        self.version_patcher = patch(
+            "openclaw_bench.cli.check_openclaw_version",
+            return_value=PreflightCheck("openclaw_version", "pass", "OpenClaw 2026.4.27 matches pinned version 2026.4.27"),
+        )
+        self.version_patcher.start()
+
+    def tearDown(self):
+        self.version_patcher.stop()
+
     def test_openclaw_run_ensures_gateway_before_benchmarking(self):
         args = _run_args(
             backend="openclaw",
@@ -384,6 +394,37 @@ class RunSmokeTests(unittest.TestCase):
         for session_id in backend.session_ids:
             self.assertLessEqual(len(session_id), 80)
             self.assertRegex(session_id, r"^[A-Za-z0-9_-]+$")
+
+    def test_runner_seeds_openclaw_context_before_backend_run(self):
+        suite = load_suite(ROOT / "manifests" / "openclaw-agent-discovery-smoke.example.json")
+        model = ModelSpec(
+            model_id="qwen3",
+            served_model_name="qwen3-1.7b",
+            kv_cache_dtype="provider_default",
+            context_limit=32768,
+        )
+        backend = _WorkspaceSeedCaptureBackend()
+        with tempfile.TemporaryDirectory() as tmp:
+            config = RunConfig(
+                run_id="seeded-context",
+                suite=suite,
+                models=[model],
+                kv_modes=["provider_default"],
+                contexts=[32768],
+                concurrencies=[1],
+                out_dir=Path(tmp) / "results",
+                workspace_root=Path(tmp) / "workspaces",
+                fixtures_root=ROOT / "fixtures",
+                backend_name="simulator",
+                openclaw_agent="bench",
+            )
+            BenchmarkRunner(backend).run(config)
+
+        self.assertEqual(backend.seed_files_seen["BOOTSTRAP.md"], False)
+        self.assertEqual(backend.seed_files_seen["AGENTS.md"], True)
+        self.assertEqual(backend.seed_files_seen["SOUL.md"], True)
+        self.assertEqual(backend.seed_files_seen[".openclaw/workspace-state.json"], True)
+        self.assertIn("qwen3-1.7b", backend.identity_text)
 
     def test_model_config_defaults_drive_matrix_without_cli_overrides(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -894,6 +935,23 @@ class _SessionIdCaptureBackend:
         return self.simulator.run(model, task, workspace, session_id, timeout_s)
 
 
+class _WorkspaceSeedCaptureBackend:
+    def __init__(self):
+        self.simulator = SimulatorBackend()
+        self.seed_files_seen = {}
+        self.identity_text = ""
+
+    def run(self, model, task, workspace, session_id, timeout_s):
+        self.seed_files_seen = {
+            "AGENTS.md": (workspace / "AGENTS.md").exists(),
+            "SOUL.md": (workspace / "SOUL.md").exists(),
+            ".openclaw/workspace-state.json": (workspace / ".openclaw" / "workspace-state.json").exists(),
+            "BOOTSTRAP.md": (workspace / "BOOTSTRAP.md").exists(),
+        }
+        self.identity_text = (workspace / "IDENTITY.md").read_text(encoding="utf-8")
+        return self.simulator.run(model, task, workspace, session_id, timeout_s)
+
+
 def _run_args(**overrides):
     values = {
         "backend": "simulator",
@@ -911,7 +969,7 @@ def _run_args(**overrides):
         "openclaw_local": False,
         "openclaw_container": "oc-bench-gateway",
         "ensure_openclaw_container": True,
-        "openclaw_container_image": "clawdaddy/openclaw:business-smoke",
+        "openclaw_container_image": "clawdaddy/openclaw:business-smoke-2026.4.27",
         "openclaw_container_home": None,
         "openclaw_container_gateway_port": 19091,
         "openclaw_container_token": None,

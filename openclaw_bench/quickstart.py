@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -11,16 +12,19 @@ from importlib import resources
 from pathlib import Path
 from typing import Callable
 
-from .preflight import PreflightCheck, ensure_openclaw_gateway
+from .preflight import PreflightCheck, check_openclaw_version, ensure_openclaw_gateway, stop_openclaw_gateway
 
 
 DEFAULT_PROFILE = "benchclaw"
 DEFAULT_AGENT = "bench"
 DEFAULT_START_PORT = 19191
 STARTER_SUITE = "openclaw-agent-discovery-smoke.example.json"
-LOCAL_MODEL_MANIFEST = "vllm-gptoss-smoke.example.json"
 API_MODEL_MANIFEST = "api-providers.example.json"
 PROVIDER_CHOICES = {"local", "api", "both"}
+DEFAULT_VLLM_BASE_URL = "http://127.0.0.1:8000/v1"
+DEFAULT_VLLM_MODEL = "gpt-oss-20b-nvfp4-smoke"
+DEFAULT_VLLM_CONTEXT = 32768
+DEFAULT_VLLM_MAX_TOKENS = 256
 
 
 @dataclass(frozen=True)
@@ -45,6 +49,24 @@ class QuickstartInitResult:
     openclaw_cli: str | None
     existing_profiles: list[str]
     validation: PreflightCheck | None
+    vllm: VllmEndpoint
+
+
+@dataclass(frozen=True)
+class VllmEndpoint:
+    base_url: str
+    model: str
+    context: int
+    max_tokens: int
+    api_env: str = "VLLM_API_KEY"
+
+    @property
+    def health_check_url(self) -> str:
+        return self.base_url.rstrip("/") + "/models"
+
+    @property
+    def route_model(self) -> str:
+        return f"vllm/{self.model}"
 
 
 def default_bench_root() -> Path:
@@ -78,8 +100,13 @@ def init_quickstart(
     force: bool = False,
     reuse_existing: bool = False,
     validate: bool = True,
+    vllm_base_url: str | None = None,
+    vllm_model: str | None = None,
+    vllm_context: int = DEFAULT_VLLM_CONTEXT,
+    vllm_max_tokens: int = DEFAULT_VLLM_MAX_TOKENS,
 ) -> QuickstartInitResult:
     provider_mode = normalize_provider_selection(providers)
+    vllm = _vllm_endpoint(vllm_base_url, vllm_model, vllm_context, vllm_max_tokens)
     root = (bench_root or default_bench_root()).expanduser()
     home_root = (home or Path.home()).expanduser()
     selected_port = port or choose_safe_port(DEFAULT_START_PORT)
@@ -95,12 +122,12 @@ def init_quickstart(
         _check_reusable_metadata(paths.metadata_path, provider_mode)
 
     suite_payload = _read_asset_json(project_root, "manifests", STARTER_SUITE)
-    model_payload = _selected_model_manifest(provider_mode, project_root)
+    model_payload = _selected_model_manifest(provider_mode, project_root, vllm)
     paths.suite_path.write_text(json.dumps(suite_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     paths.model_config_path.write_text(json.dumps(model_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     _copy_asset_tree(project_root, ("fixtures", "discovery_repo"), paths.fixtures_root / "discovery_repo")
 
-    config = _openclaw_config(provider_mode, project_root, selected_port, agent)
+    config = _openclaw_config(provider_mode, project_root, selected_port, agent, vllm)
     if not config_exists or force:
         paths.config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -115,6 +142,9 @@ def init_quickstart(
         "fixtures_root": str(paths.fixtures_root),
         "suite": str(paths.suite_path),
         "model_config": str(paths.model_config_path),
+        "vllm_base_url": vllm.base_url,
+        "vllm_model": vllm.model,
+        "vllm_context": vllm.context,
         "oauth_note": "OAuth-backed providers are bring-your-own-auth for this phase; configure them in the benchclaw profile before running.",
     }
     paths.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -131,23 +161,19 @@ def init_quickstart(
         openclaw_cli=shutil.which("openclaw"),
         existing_profiles=detect_existing_profiles(home_root),
         validation=validation,
+        vllm=vllm,
     )
 
 
 def start_benchclaw_gateway(profile: str = DEFAULT_PROFILE, timeout_s: int = 60) -> PreflightCheck:
+    version = check_openclaw_version()
+    if version.status == "fail":
+        return version
     return ensure_openclaw_gateway(profile, None, timeout_s=timeout_s)
 
 
 def stop_benchclaw_gateway(profile: str = DEFAULT_PROFILE, timeout_s: int = 30) -> PreflightCheck:
-    cmd = ["openclaw", "--profile", profile, "gateway", "stop"]
-    try:
-        proc = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout_s, check=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return PreflightCheck("openclaw_gateway_stop", "fail", str(exc))
-    output = f"{proc.stdout}\n{proc.stderr}".strip()
-    if proc.returncode != 0:
-        return PreflightCheck("openclaw_gateway_stop", "fail", _trim_output(output))
-    return PreflightCheck("openclaw_gateway_stop", "pass", _trim_output(output) or f"stopped {profile} gateway")
+    return stop_openclaw_gateway(profile, timeout_s=timeout_s)
 
 
 def validate_benchclaw_config(profile: str, home: Path | None = None, timeout_s: int = 15) -> PreflightCheck:
@@ -230,13 +256,12 @@ def _check_reusable_metadata(metadata_path: Path, providers: str) -> None:
         )
 
 
-def _selected_model_manifest(providers: str, project_root: Path) -> dict:
+def _selected_model_manifest(providers: str, project_root: Path, vllm: VllmEndpoint) -> dict:
     models = []
     source_manifests = []
     if providers in {"local", "both"}:
-        local = _read_asset_json(project_root, "manifests", LOCAL_MODEL_MANIFEST)
-        models.extend(local["models"])
-        source_manifests.append(LOCAL_MODEL_MANIFEST)
+        models.append(_external_vllm_model(vllm))
+        source_manifests.append("generated-external-vllm")
     if providers in {"api", "both"}:
         api = _read_asset_json(project_root, "manifests", API_MODEL_MANIFEST)
         models.extend(api["models"])
@@ -251,15 +276,30 @@ def _selected_model_manifest(providers: str, project_root: Path) -> dict:
     }
 
 
-def _openclaw_config(providers: str, project_root: Path, port: int, agent: str) -> dict:
+def _openclaw_config(providers: str, project_root: Path, port: int, agent: str, vllm: VllmEndpoint) -> dict:
     provider_config = {}
     if providers in {"local", "both"}:
-        provider_config["vllm"] = _read_asset_json(project_root, "openclaw-config", "vllm-provider-smoke.example.json")
+        provider_config["vllm"] = _vllm_provider_config(vllm)
     if providers in {"api", "both"}:
         provider_config["openai"] = _read_asset_json(project_root, "openclaw-config", "openai-provider.example.json")
         provider_config["anthropic"] = _read_asset_json(project_root, "openclaw-config", "anthropic-provider.example.json")
 
-    default_model = _default_route_model(providers)
+    default_model = _default_route_model(providers, vllm)
+    agent_defaults = {
+        "model": default_model,
+        "params": {"maxTokens": vllm.max_tokens},
+        "skipBootstrap": True,
+    }
+    if providers in {"local", "both"}:
+        agent_defaults["models"] = {
+            vllm.route_model: {
+                "params": {
+                    "maxTokens": vllm.max_tokens,
+                    "chatTemplateKwargs": {"enable_thinking": False},
+                }
+            }
+        }
+
     return {
         "commands": {
             "native": "auto",
@@ -272,21 +312,26 @@ def _openclaw_config(providers: str, project_root: Path, port: int, agent: str) 
                 "VLLM_API_KEY": "vllm-local",
             }
         },
+        "secrets": {
+            "providers": {
+                "bench": {
+                    "source": "env",
+                    "allowlist": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "VLLM_API_KEY"],
+                }
+            }
+        },
         "gateway": {
             "mode": "local",
             "bind": "loopback",
             "port": port,
-            "auth": {"mode": "none"},
+            "auth": {"mode": "token", "token": secrets.token_urlsafe(32)},
             "tailscale": {"mode": "off"},
         },
         "models": {
             "providers": provider_config,
         },
         "agents": {
-            "defaults": {
-                "model": default_model,
-                "params": {"maxTokens": 256},
-            },
+            "defaults": agent_defaults,
             "list": [
                 {
                     "id": agent,
@@ -298,10 +343,66 @@ def _openclaw_config(providers: str, project_root: Path, port: int, agent: str) 
     }
 
 
-def _default_route_model(providers: str) -> str:
+def _default_route_model(providers: str, vllm: VllmEndpoint) -> str:
     if providers in {"local", "both"}:
-        return "vllm/gpt-oss-20b-nvfp4-smoke"
+        return vllm.route_model
     return "openai/gpt-4.1"
+
+
+def _vllm_endpoint(base_url: str | None, model: str | None, context: int, max_tokens: int) -> VllmEndpoint:
+    selected_base_url = (base_url or os.environ.get("OC_BENCH_VLLM_BASE_URL") or DEFAULT_VLLM_BASE_URL).rstrip("/")
+    selected_model = model or os.environ.get("OC_BENCH_VLLM_MODEL") or DEFAULT_VLLM_MODEL
+    if context <= 0:
+        raise ValueError("vllm_context must be positive")
+    if max_tokens <= 0:
+        raise ValueError("vllm_max_tokens must be positive")
+    return VllmEndpoint(selected_base_url, selected_model, context, max_tokens)
+
+
+def _external_vllm_model(vllm: VllmEndpoint) -> dict:
+    return {
+        "model_id": vllm.model,
+        "served_model_name": vllm.model,
+        "openclaw_model_name": vllm.route_model,
+        "provider_type": "local",
+        "hardware_profile": "external-vllm-api",
+        "weight_quant": "external",
+        "kv_modes": ["provider_default"],
+        "contexts": [vllm.context],
+        "concurrency": [1],
+        "health_check_url": vllm.health_check_url,
+        "api_base": vllm.base_url,
+        "api_env": vllm.api_env,
+        "expected_support": "Existing OpenAI-compatible vLLM endpoint; oc-bench will not start or restart this model.",
+    }
+
+
+def _vllm_provider_config(vllm: VllmEndpoint) -> dict:
+    return {
+        "baseUrl": vllm.base_url,
+        "api": "openai-completions",
+        "request": {
+            "auth": {
+                "mode": "authorization-bearer",
+                "token": {
+                    "source": "env",
+                    "provider": "bench",
+                    "id": vllm.api_env,
+                },
+            },
+            "allowPrivateNetwork": True,
+        },
+        "models": [
+            {
+                "id": vllm.model,
+                "name": vllm.model,
+                "reasoning": False,
+                "contextWindow": vllm.context,
+                "contextTokens": vllm.context,
+                "maxTokens": vllm.max_tokens,
+            }
+        ],
+    }
 
 
 def _read_json(path: Path) -> dict:

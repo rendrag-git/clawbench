@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from openclaw_bench.workspace import changed_files, copy_fixture, read_text_files, snapshot_files
+from openclaw_bench.workspace import changed_files, copy_fixture, read_text_files, seed_openclaw_workspace_files, snapshot_files
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,6 +38,27 @@ class WorkspaceTests(unittest.TestCase):
 
             self.assertEqual(snapshot_files(root), {"app.py": snapshot_files(root)["app.py"]})
             self.assertEqual(read_text_files(root), {"app.py": "print('tracked')\n"})
+
+    def test_seed_openclaw_workspace_files_creates_real_agent_context_without_bootstrap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            seed_openclaw_workspace_files(
+                root,
+                agent_id="bench-007",
+                task_id="workspace-discovery",
+                model_id="qwen3-1.7b",
+            )
+
+            self.assertTrue((root / "AGENTS.md").exists())
+            self.assertTrue((root / "SOUL.md").exists())
+            self.assertTrue((root / "TOOLS.md").exists())
+            self.assertTrue((root / "IDENTITY.md").exists())
+            self.assertTrue((root / "USER.md").exists())
+            self.assertTrue((root / "HEARTBEAT.md").exists())
+            self.assertFalse((root / "BOOTSTRAP.md").exists())
+            self.assertIn("workspace-discovery", (root / "AGENTS.md").read_text(encoding="utf-8"))
+            self.assertIn("qwen3-1.7b", (root / "IDENTITY.md").read_text(encoding="utf-8"))
+            self.assertIn("setupCompletedAt", (root / ".openclaw" / "workspace-state.json").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import shutil
 import subprocess
 import tempfile
@@ -12,7 +13,11 @@ from pathlib import Path
 from .backend import OpenClawBackend
 from .container import DEFAULT_GATEWAY_PORT, gateway_run_command
 from .models import ModelSpec, SuiteManifest, TaskSpec
-from .workspace import copy_fixture
+from .workspace import copy_fixture, seed_openclaw_workspace_files
+
+
+OPENCLAW_PINNED_VERSION = "2026.4.27"
+OPENCLAW_BLOCKED_VERSION = "2026.4.29"
 
 
 @dataclass
@@ -294,6 +299,10 @@ def _check_openclaw(
         if executable is None:
             return [PreflightCheck("openclaw_cli", "fail", "openclaw executable not found")]
         checks.append(PreflightCheck("openclaw_cli", "pass", executable))
+    version_check = check_openclaw_version(container)
+    checks.append(version_check)
+    if version_check.status == "fail" and not local:
+        return checks
     if local:
         checks.append(_check_profile_config(profile, container, local=True))
         checks.append(PreflightCheck("openclaw_gateway", "warn", "--openclaw-local skips gateway requirement"))
@@ -330,6 +339,44 @@ def _check_container_config(profile: str, container: str) -> PreflightCheck:
     if proc.returncode == 0:
         return PreflightCheck("openclaw_profile_config", "pass", f"profile {profile} validates inside {container}")
     return PreflightCheck("openclaw_profile_config", "fail", _trim_output(output))
+
+
+def check_openclaw_version(container: str | None = None) -> PreflightCheck:
+    cmd = [*_openclaw_cmd(container), "--version"]
+    try:
+        proc = subprocess.run(cmd, text=True, capture_output=True, timeout=10, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return PreflightCheck("openclaw_version", "fail", str(exc))
+    output = f"{proc.stdout}\n{proc.stderr}".strip()
+    if proc.returncode != 0:
+        return PreflightCheck("openclaw_version", "fail", _trim_output(output))
+    version = _parse_openclaw_version(output)
+    if version is None:
+        return PreflightCheck("openclaw_version", "fail", f"could not parse OpenClaw version from: {_trim_output(output)}")
+    if version != OPENCLAW_PINNED_VERSION:
+        return PreflightCheck(
+            "openclaw_version",
+            "fail",
+            (
+                f"OpenClaw {version} does not match pinned version {OPENCLAW_PINNED_VERSION}; "
+                f"{OPENCLAW_BLOCKED_VERSION} is currently blocked for bench runs. "
+                f"Use npm install -g openclaw@{OPENCLAW_PINNED_VERSION}."
+            ),
+        )
+    return PreflightCheck("openclaw_version", "pass", f"OpenClaw {version} matches pinned version {OPENCLAW_PINNED_VERSION}")
+
+
+def _parse_openclaw_version(output: str) -> str | None:
+    for token in output.replace("(", " ").split():
+        parts = token.split(".")
+        if len(parts) != 3:
+            continue
+        try:
+            tuple(int(part) for part in parts)
+        except ValueError:
+            continue
+        return token
+    return None
 
 
 def _check_openclaw_model_routes(
@@ -402,6 +449,12 @@ def _check_openclaw_agent_routes(
         workspace = workspace_root / "_preflight_agent_smoke" / _safe_path_part(f"{model.comparison_key}-{model.kv_cache_dtype}-ctx{model.context_limit}")
         try:
             copy_fixture(fixture, workspace)
+            seed_openclaw_workspace_files(
+                workspace,
+                agent_id=f"{agent}-preflight",
+                task_id=task.task_id,
+                model_id=model.served_model_name,
+            )
         except OSError as exc:
             checks.append(PreflightCheck(label, "fail", f"agent smoke workspace setup failed: {exc}"))
             continue
@@ -503,13 +556,9 @@ def ensure_openclaw_gateway(profile: str, container: str | None = None, timeout_
     if current.status == "pass":
         return PreflightCheck("openclaw_gateway", "pass", _join_gateway_notes("already running", current.notes))
 
-    start_cmd = _gateway_start_cmd(profile, container)
-    try:
-        start = subprocess.run(start_cmd, text=True, capture_output=True, timeout=max(timeout_s, 1), check=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return PreflightCheck("openclaw_gateway", "fail", f"gateway auto-start failed: {exc}; previous status: {current.notes}")
-    start_output = f"{start.stdout}\n{start.stderr}".strip()
-    if start.returncode != 0:
+    start = _start_gateway_process(profile, container, timeout_s)
+    start_output = start.notes
+    if start.status == "fail":
         return PreflightCheck(
             "openclaw_gateway",
             "fail",
@@ -528,6 +577,27 @@ def ensure_openclaw_gateway(profile: str, container: str | None = None, timeout_
         "fail",
         _trim_output(f"gateway auto-start ran but status is still {after.status}: {after.notes}; start output: {start_output}"),
     )
+
+
+def stop_openclaw_gateway(profile: str, timeout_s: int = 30) -> PreflightCheck:
+    foreground = _stop_foreground_gateway(profile, timeout_s)
+    if foreground.status == "pass":
+        return PreflightCheck("openclaw_gateway_stop", "pass", foreground.notes)
+
+    cmd = ["openclaw", "--profile", profile, "gateway", "stop"]
+    try:
+        proc = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout_s, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return PreflightCheck("openclaw_gateway_stop", "fail", str(exc))
+    output = f"{proc.stdout}\n{proc.stderr}".strip()
+    if proc.returncode != 0:
+        notes = _trim_output(output)
+        if foreground.status == "fail":
+            notes = _join_gateway_notes(notes, foreground.notes)
+        return PreflightCheck("openclaw_gateway_stop", "fail", notes)
+    if foreground.status == "fail":
+        return PreflightCheck("openclaw_gateway_stop", "fail", foreground.notes)
+    return PreflightCheck("openclaw_gateway_stop", "pass", _trim_output(output) or f"stopped {profile} gateway")
 
 
 def _compact_gateway_status(output: str) -> str:
@@ -552,10 +622,102 @@ def _openclaw_cmd(container: str | None = None) -> list[str]:
     return ["docker", "exec", container, "openclaw"]
 
 
+def _start_gateway_process(profile: str, container: str | None = None, timeout_s: int = 60) -> PreflightCheck:
+    if container:
+        start_cmd = _gateway_start_cmd(profile, container)
+        try:
+            start = subprocess.run(start_cmd, text=True, capture_output=True, timeout=max(timeout_s, 1), check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return PreflightCheck("openclaw_gateway_start", "fail", str(exc))
+        output = f"{start.stdout}\n{start.stderr}".strip()
+        if start.returncode != 0:
+            return PreflightCheck("openclaw_gateway_start", "fail", _trim_output(output))
+        return PreflightCheck("openclaw_gateway_start", "pass", _trim_output(output) or "started detached gateway in container")
+
+    start_cmd = _gateway_start_cmd(profile, None)
+    try:
+        process = subprocess.Popen(
+            start_cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        return PreflightCheck("openclaw_gateway_start", "fail", str(exc))
+    try:
+        _gateway_pid_path(profile).write_text(str(process.pid), encoding="utf-8")
+    except OSError as exc:
+        return PreflightCheck("openclaw_gateway_start", "fail", f"launched pid {process.pid} but could not write pid file: {exc}")
+    return PreflightCheck("openclaw_gateway_start", "pass", f"launched foreground gateway pid {process.pid}")
+
+
 def _gateway_start_cmd(profile: str, container: str | None = None) -> list[str]:
     if container:
         return ["docker", "exec", "-d", container, "sh", "-lc", gateway_run_command(profile, DEFAULT_GATEWAY_PORT)]
-    return ["openclaw", "--profile", profile, "gateway", "--dev", "--verbose", "start"]
+    return ["openclaw", "--profile", profile, "gateway", "--dev", "--verbose", "run"]
+
+
+def _stop_foreground_gateway(profile: str, timeout_s: int = 30) -> PreflightCheck:
+    pid_path = _gateway_pid_path(profile)
+    if not pid_path.exists():
+        return PreflightCheck("openclaw_gateway_foreground_stop", "warn", f"no foreground pid file at {pid_path}")
+    try:
+        pid = int(pid_path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError) as exc:
+        return PreflightCheck("openclaw_gateway_foreground_stop", "fail", f"invalid foreground pid file {pid_path}: {exc}")
+    if not _process_exists(pid):
+        _unlink_pid_file(pid_path)
+        return PreflightCheck("openclaw_gateway_foreground_stop", "pass", f"foreground gateway pid {pid} was already stopped")
+    if not _pid_matches_gateway(pid):
+        return PreflightCheck("openclaw_gateway_foreground_stop", "fail", f"pid {pid} does not look like a {profile} OpenClaw gateway")
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        _unlink_pid_file(pid_path)
+        return PreflightCheck("openclaw_gateway_foreground_stop", "pass", f"foreground gateway pid {pid} was already stopped")
+    except OSError as exc:
+        return PreflightCheck("openclaw_gateway_foreground_stop", "fail", str(exc))
+
+    deadline = time.monotonic() + max(timeout_s, 0)
+    while time.monotonic() < deadline:
+        if not _process_exists(pid):
+            _unlink_pid_file(pid_path)
+            return PreflightCheck("openclaw_gateway_foreground_stop", "pass", f"stopped foreground gateway pid {pid}")
+        time.sleep(0.2)
+    return PreflightCheck("openclaw_gateway_foreground_stop", "fail", f"foreground gateway pid {pid} did not stop within {timeout_s}s")
+
+
+def _gateway_pid_path(profile: str) -> Path:
+    return Path(tempfile.gettempdir()) / f"openclaw-bench-gateway-{_safe_path_part(profile)}.pid"
+
+
+def _pid_matches_gateway(pid: int) -> bool:
+    cmdline_path = Path("/proc") / str(pid) / "cmdline"
+    try:
+        cmdline = cmdline_path.read_bytes().replace(b"\0", b" ").decode("utf-8", errors="replace")
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+    return "openclaw" in cmdline
+
+
+def _process_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+
+
+def _unlink_pid_file(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
 
 
 def _safe_path_part(value: str) -> str:

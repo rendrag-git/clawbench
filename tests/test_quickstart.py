@@ -47,18 +47,64 @@ class QuickstartTests(unittest.TestCase):
             self.assertEqual(config["gateway"]["mode"], "local")
             self.assertEqual(config["gateway"]["bind"], "loopback")
             self.assertEqual(config["gateway"]["port"], 19222)
-            self.assertEqual(config["gateway"]["auth"]["mode"], "none")
+            self.assertEqual(config["gateway"]["auth"]["mode"], "token")
+            self.assertGreater(len(config["gateway"]["auth"]["token"]), 20)
+            self.assertEqual(config["secrets"]["providers"]["bench"]["source"], "env")
+            self.assertIn("VLLM_API_KEY", config["secrets"]["providers"]["bench"]["allowlist"])
             self.assertEqual(set(config["models"]["providers"]), {"vllm", "openai", "anthropic"})
+            self.assertIs(config["agents"]["defaults"]["skipBootstrap"], True)
             self.assertEqual(config["agents"]["list"][0]["id"], "bench")
+            self.assertEqual(config["models"]["providers"]["vllm"]["baseUrl"], "http://127.0.0.1:8000/v1")
+            self.assertEqual(config["models"]["providers"]["vllm"]["models"][0]["id"], "gpt-oss-20b-nvfp4-smoke")
+            self.assertFalse(config["models"]["providers"]["vllm"]["models"][0]["reasoning"])
+            self.assertEqual(
+                config["agents"]["defaults"]["models"]["vllm/gpt-oss-20b-nvfp4-smoke"]["params"],
+                {"maxTokens": 256, "chatTemplateKwargs": {"enable_thinking": False}},
+            )
 
             model_config = json.loads(result.paths.model_config_path.read_text(encoding="utf-8"))
             provider_types = {model["provider_type"] for model in model_config["models"]}
             self.assertEqual(provider_types, {"local", "api", "subscription"})
             self.assertEqual(model_config["models"][0]["provider_type"], "local")
+            self.assertNotIn("serve_command", model_config["models"][0])
+            self.assertEqual(model_config["models"][0]["api_base"], "http://127.0.0.1:8000/v1")
             self.assertIn("OAuth", model_config["manifest_scope"]["notes"])
 
             suite = json.loads(result.paths.suite_path.read_text(encoding="utf-8"))
             self.assertEqual(suite["suite_id"], "openclaw-agent-discovery-smoke")
+
+    def test_init_can_target_external_small_vllm_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = init_quickstart(
+                providers="local",
+                project_root=ROOT,
+                bench_root=root / "bench",
+                home=root / "home",
+                port=19222,
+                validate=False,
+                vllm_base_url="http://10.68.198.1:8003/v1",
+                vllm_model="qwen3-vl-2b-instruct",
+                vllm_context=2048,
+                vllm_max_tokens=128,
+            )
+
+            config = json.loads(result.paths.config_path.read_text(encoding="utf-8"))
+            provider = config["models"]["providers"]["vllm"]
+            self.assertEqual(provider["baseUrl"], "http://10.68.198.1:8003/v1")
+            self.assertEqual(provider["models"][0]["id"], "qwen3-vl-2b-instruct")
+            self.assertEqual(provider["models"][0]["maxTokens"], 128)
+            self.assertFalse(provider["models"][0]["reasoning"])
+            self.assertEqual(config["agents"]["defaults"]["model"], "vllm/qwen3-vl-2b-instruct")
+            self.assertEqual(
+                config["agents"]["defaults"]["models"]["vllm/qwen3-vl-2b-instruct"]["params"],
+                {"maxTokens": 128, "chatTemplateKwargs": {"enable_thinking": False}},
+            )
+
+            model = json.loads(result.paths.model_config_path.read_text(encoding="utf-8"))["models"][0]
+            self.assertEqual(model["health_check_url"], "http://10.68.198.1:8003/v1/models")
+            self.assertEqual(model["contexts"], [2048])
+            self.assertNotIn("serve_command", model)
 
     def test_init_refuses_to_overwrite_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -97,8 +143,10 @@ class QuickstartTests(unittest.TestCase):
 
     def test_stop_only_calls_benchclaw_gateway_stop(self):
         completed = _completed(returncode=0, stdout="stopped\n")
-        with patch("subprocess.run", return_value=completed) as run_mock:
-            check = stop_benchclaw_gateway("benchclaw")
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("openclaw_bench.preflight._gateway_pid_path", return_value=Path(tmp) / "gateway.pid"):
+                with patch("subprocess.run", return_value=completed) as run_mock:
+                    check = stop_benchclaw_gateway("benchclaw")
 
         self.assertEqual(check.status, "pass")
         self.assertEqual(run_mock.call_args.args[0], ["openclaw", "--profile", "benchclaw", "gateway", "stop"])
@@ -180,6 +228,10 @@ def _init_args(tmp: str, providers: str, no_validate: bool):
     args.openclaw_profile = "benchclaw"
     args.openclaw_agent = "bench"
     args.gateway_port = 19224
+    args.vllm_base_url = None
+    args.vllm_model = None
+    args.vllm_context = 32768
+    args.vllm_max_tokens = 256
     args.force = False
     args.no_validate = no_validate
     return args

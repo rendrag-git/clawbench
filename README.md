@@ -1,5 +1,7 @@
 # OpenClaw Local Model Benchmark Design
 
+Current live testing state is tracked in [STATUS.md](STATUS.md).
+
 ## Goal
 
 Measure whether a local model is useful for OpenClaw agent work, not just whether it serves tokens quickly.
@@ -68,9 +70,16 @@ openclaw --profile bench agent \
 
 Each concurrent worker gets a separate workspace copy so code-edit tasks do not conflict.
 
-Fresh clones do not need a separate manual gateway start before the first benchmark. After installing the repo, `oc-bench` and `openclaw-bench` are equivalent entrypoints. For non-local OpenClaw runs, `oc-bench run` and `oc-bench preflight` ensure the selected `--openclaw-profile` gateway by default, using `openclaw --profile bench gateway --dev --verbose start` when the gateway is not already reachable, then polling readiness for up to `--openclaw-gateway-timeout` seconds. Gateway runs also default to configured benchmark workspace agents so model routing is bound on the agent instead of sent as an unauthorized per-call override. Use `--no-ensure-openclaw-gateway` only when a supervisor or container entrypoint already owns gateway lifecycle.
+Fresh clones do not need a separate manual gateway start before the first benchmark. After installing the repo, `oc-bench` and `openclaw-bench` are equivalent entrypoints. For non-local OpenClaw runs, `oc-bench run` and `oc-bench preflight` ensure the selected `--openclaw-profile` gateway by default, using `openclaw --profile bench gateway --dev --verbose run` as a detached foreground gateway when the gateway is not already reachable, then polling readiness for up to `--openclaw-gateway-timeout` seconds. Gateway runs also default to configured benchmark workspace agents so model routing is bound on the agent instead of sent as an unauthorized per-call override. Use `--no-ensure-openclaw-gateway` only when a supervisor or container entrypoint already owns gateway lifecycle.
 
-For isolated Docker runs, pass `--openclaw-container oc-bench-gateway`. On first use, `oc-bench` creates or starts that container with image `clawdaddy/openclaw:business-smoke`, host networking, a separate home at `/home/ubuntu/openclaw-bench/container-home`, and exact-path mounts for the repo, benchmark root, and any custom workspace root. The container stays as a reusable OpenClaw runtime; the harness still starts/checks the selected `bench` gateway through `openclaw --profile bench gateway status` and a detached verbose foreground gateway when needed. This path is intentionally separate from any host or LXC OpenClaw install. Use `--no-ensure-openclaw-container` only when another supervisor already owns the container.
+OpenClaw is pinned to `2026.4.27` for this harness. `2026.4.29` is blocked for benchmark runs until the regressions are resolved:
+
+```bash
+npm install -g openclaw@2026.4.27
+openclaw --version
+```
+
+For isolated Docker runs, pass `--openclaw-container oc-bench-gateway`. On first use, `oc-bench` creates or starts that container with image `clawdaddy/openclaw:business-smoke-2026.4.27`, host networking, a separate home at `/home/ubuntu/openclaw-bench/container-home`, and exact-path mounts for the repo, benchmark root, and any custom workspace root. The container stays as a reusable OpenClaw runtime; the harness still starts/checks the selected `bench` gateway through `openclaw --profile bench gateway status` and a detached verbose foreground gateway when needed. This path is intentionally separate from any host or LXC OpenClaw install. Use `--no-ensure-openclaw-container` only when another supervisor already owns the container.
 
 ## Model Matrix
 
@@ -504,11 +513,23 @@ The combined task manifest for certification-oriented live runs is `manifests/op
 
 ### Quickstart
 
-`oc-bench init` creates an isolated `benchclaw` OpenClaw profile, chooses a loopback gateway port, writes a local benchmark root, and generates starter suite/model manifests from a provider selection. Omit `--providers` for the wizard, or pass `local`, `api`, or `both` for non-interactive setup. Local vLLM routes are generated first; API-key routes for OpenAI and Anthropic are added next. OAuth-backed providers are bring-your-own-auth for this phase and should be configured directly in the `benchclaw` profile before running them.
+`oc-bench init` creates an isolated `benchclaw` OpenClaw profile, chooses a loopback gateway port, writes a generated loopback gateway token, writes a local benchmark root, and generates starter suite/model manifests from a provider selection. Omit `--providers` for the wizard, or pass `local`, `api`, or `both` for non-interactive setup. Local provider routes should connect to an existing local runtime such as vLLM, llama.cpp, Ollama, or an Apple Silicon local provider; the target setup flow is inspect-first, ask-second, so the CLI should discover what is already running before prompting the user for missing details. The quickstart manifest does not include a `serve_command` for discovered external providers, so it will not start, stop, restart, or containerize the user's model runtime. API-key routes for OpenAI and Anthropic are added next. OAuth-backed providers are bring-your-own-auth for this phase and should be configured directly in the `benchclaw` profile before running them. Generated benchmark profiles set `agents.defaults.skipBootstrap=true`; each copied benchmark workspace is seeded with OpenClaw-style `AGENTS.md`, `SOUL.md`, `TOOLS.md`, `IDENTITY.md`, `USER.md`, `HEARTBEAT.md`, and completed workspace state, but no `BOOTSTRAP.md`.
 
 ```bash
 oc-bench init --providers local
 ```
+
+For an `oc-stack` profile that should use a small host vLLM service on a separate port, point the generated route at the Incus host bridge address:
+
+```bash
+oc-bench init --providers local \
+  --vllm-base-url http://10.68.198.1:8003/v1 \
+  --vllm-model qwen3.5-4b \
+  --vllm-context 32768 \
+  --vllm-max-tokens 128
+```
+
+The repo includes `deploy/openclaw-vllm-small-bench.service` for a persistent Qwen3.5 4B API on GPU 0. It binds only to `10.68.198.1:8003`, uses served model name `qwen3.5-4b`, sets `--max-model-len 32768` for a 32k OpenClaw route context, enables vLLM auto tool choice with the Qwen3 coder parser for OpenClaw agent tool calls, and uses eager mode so the 16GB A4000 has enough memory for the 32k KV cache. Generated quickstart profiles mark local vLLM models as `reasoning=false` and set `chatTemplateKwargs.enable_thinking=false`, which prevents Qwen reasoning-only terminal turns from failing OpenClaw route smoke.
 
 The one-command starter flow initializes the same isolated profile, starts only the `benchclaw` gateway, runs preflight, executes the discovery smoke benchmark, prints the result path, and can stop only that gateway afterward:
 
