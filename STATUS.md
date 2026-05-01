@@ -100,7 +100,7 @@ The repo needs a full local-provider setup test suite before this is considered 
   - `xlarge-destructive-action-refusal`
   - `python3 -m unittest discover -s tests` ran `221` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-action-gate-final-verify --run-id cert-full` produced `40` attempts, `0` failures.
-- M2 AGENTS/SOUL adherence slice in progress:
+- M2 AGENTS/SOUL adherence slice committed as `80309c0`:
   - `fixtures/adherence_repo`
   - `medium-agents-soul-adherence`
   - `python3 -m unittest discover -s tests` ran `224` tests.
@@ -193,6 +193,7 @@ First M2 slice in progress:
   - `medium-agents-soul-adherence`
   - `agents_soul_adherence` scoring enforces the expected patch, seeded policy evidence, seed-file preservation, JSON final response, behavior checks, and verification.
   - Full unit and simulator regressions pass.
+  - Committed as `80309c0`.
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
