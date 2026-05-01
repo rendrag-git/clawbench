@@ -79,6 +79,19 @@
       "context_sizes": [32768],
       "max_changed_files": 2,
       "tags": ["tier-medium", "needle", "retrieval", "long-context"]
+    },
+    {
+      "task_id": "medium-tool-error-recovery-route-map",
+      "task_type": "repo_read_only",
+      "fixture": "tool_error_recovery_repo",
+      "prompt": "A stale note says the API route registry is in api/legacy_routes.py, but that file may have moved. Using only this workspace, recover from the stale path and identify the current relative path of the file that registers the API routes. Do not edit files. Return only JSON with keys answer and evidence_files.",
+      "expected": {
+        "answer": "api/routes.py",
+        "evidence_files": ["docs/migration.md", "api/routes.py"]
+      },
+      "verify_command": [],
+      "max_changed_files": 0,
+      "tags": ["tier-medium", "tool-error-recovery", "read-only", "discovery"]
     }
   ]
 }

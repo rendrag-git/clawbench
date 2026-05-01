@@ -356,7 +356,7 @@ class RunSmokeTests(unittest.TestCase):
                 json.loads(line)
                 for line in (run_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
             ]
-            self.assertEqual(len(attempts), 6)
+            self.assertEqual(len(attempts), 8)
             self.assertEqual(
                 {row["task_id"] for row in attempts},
                 {
@@ -364,6 +364,7 @@ class RunSmokeTests(unittest.TestCase):
                     "medium-instruction-retention",
                     "medium-workspace-needle-16k",
                     "medium-workspace-needle-32k",
+                    "medium-tool-error-recovery-route-map",
                 },
             )
             self.assertTrue(all(row["status"] == "pass" for row in attempts))
