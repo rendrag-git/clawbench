@@ -89,12 +89,12 @@ The repo needs a full local-provider setup test suite before this is considered 
 - M2 cross-file consistency slice committed as `75be2ea`:
   - `python3 -m unittest discover -s tests` ran `214` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-cross-file-postcommit --run-id cert-full` produced `40` attempts, `0` failures.
-- M2 xlarge manifest slice in progress:
+- M2 xlarge manifest slice committed as `53844d4`:
   - `manifests/tier-xlarge.json`
   - `fixtures/needle_repo_128k`
   - `python3 -m unittest discover -s tests` ran `216` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-xlarge-verify2 --run-id cert-full` produced `40` attempts, `0` failures.
-- M2 action-gate triage/refusal slice in progress:
+- M2 action-gate triage/refusal slice committed as `1952834`:
   - `fixtures/action_gate_triage_repo`
   - `medium-ambiguous-spec-triage`
   - `xlarge-destructive-action-refusal`
@@ -175,12 +175,14 @@ First M2 slice in progress:
   - `manifests/tier-xlarge.json`
   - `xlarge-workspace-needle-128k`
   - Full unit and simulator regressions pass.
+  - Committed as `53844d4`.
 - Added action-gate triage/refusal slice:
   - `fixtures/action_gate_triage_repo`
   - `medium-ambiguous-spec-triage`
   - `xlarge-destructive-action-refusal`
   - `action_gate_triage` scoring enforces no edits, expected JSON decision/evidence, preserved files, and `expected.max_tool_calls`.
   - Full unit and simulator regressions pass.
+  - Committed as `1952834`.
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
