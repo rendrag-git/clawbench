@@ -47,26 +47,32 @@ def score_task(task: TaskSpec, workspace: Path, response: BackendResponse, chang
 
     checks: list[tuple[bool, str]] = []
     if task.task_type == "workspace_discovery":
+        # Intent: identify real owner files and a runnable test command without requiring one canonical command string.
         checks.extend(_score_discovery(task, workspace, response))
     elif task.task_type == "repo_read_only":
+        # Intent: name the exact responsible file with real evidence while leaving the workspace untouched.
         checks.extend(_score_repo_read_only(task, workspace, response, changed))
     elif task.task_type == "repo_code_edit":
+        # Intent: land the expected production patch only, then prove behavior through checks and tests.
         checks.extend(_score_expected_changed_files(task, changed))
         checks.extend(_score_no_unexpected_changes(task, changed))
         checks.extend(_score_behavior_checks(task, workspace))
         checks.append((tests_passed, "verification command failed"))
     elif task.task_type == "multi_file_bug_trace":
+        # Intent: preserve the bug-path explanation while landing the smallest verified production fix.
         checks.extend(_score_expected_changed_files(task, changed))
         checks.extend(_score_no_unexpected_changes(task, changed))
         checks.extend(_score_bug_path(task, response))
         checks.extend(_score_behavior_checks(task, workspace))
         checks.append((tests_passed, "verification command failed"))
     elif task.task_type == "patch_execution":
+        # Intent: execute the requested patch without unrelated edits, visible-test overfit, or test changes.
         checks.extend(_score_expected_changed_files(task, changed))
         checks.extend(_score_no_unexpected_changes(task, changed))
         checks.extend(_score_behavior_checks(task, workspace))
         checks.append((tests_passed, "verification command failed"))
     elif task.task_type == "workspace_needle":
+        # Intent: retrieve the real needle, update the target file, cite the source, and avoid distractors.
         expected_token = task.expected.get("needle")
         target_file = str(task.expected.get("target_file") or "app/health.py")
         source_file = str(task.expected.get("source_file") or "app/config_notes.py")
@@ -83,6 +89,7 @@ def score_task(task: TaskSpec, workspace: Path, response: BackendResponse, chang
             ]
         )
     elif task.task_type == "instruction_retention":
+        # Intent: honor constraints by reusing the existing helper and preserving the requested behavior.
         checks.extend(_score_instruction_retention(task, workspace, response, changed, tests_passed))
     else:
         checks.append((False, f"unknown task type {task.task_type}"))
@@ -107,14 +114,10 @@ def _score_discovery(task: TaskSpec, workspace: Path, response: BackendResponse)
     checks = [(_json_valid(response), "response was not valid JSON")]
     if not isinstance(output, dict):
         return checks + [(False, "missing JSON object")]
-    command_matches = output.get("test_command") == expected.get("test_command")
-    checks.append((command_matches, "test_command did not match expected value"))
+    # Catches stale or non-command test answers without requiring one canonical shell string.
+    checks.append(_test_command_runnable(workspace, output.get("test_command")))
     for key in ("routes_file", "schema_file"):
         checks.append((output.get(key) == expected.get(key), f"{key} did not match expected value"))
-    if command_matches:
-        checks.append(_test_command_runnable(workspace, expected.get("test_command")))
-    else:
-        checks.append((False, "test_command was not executed because it did not match expected value"))
     checks.append((path_exists(workspace, str(output.get("routes_file", ""))), "routes_file does not exist"))
     checks.append((path_exists(workspace, str(output.get("schema_file", ""))), "schema_file does not exist"))
     return checks
@@ -129,11 +132,79 @@ def _test_command_runnable(workspace: Path, command_text: Any) -> tuple[bool, st
         return False, f"test_command was not parseable: {exc}"
     if not command:
         return False, "test_command was not runnable"
+    if not _safe_test_command(command):
+        return False, "test_command was not a safe test command"
     ok, output = run_verify_command(workspace, command, timeout_s=30)
     if ok:
         return True, "test_command runnable"
     detail = f": {output[-200:]}" if output else ""
     return False, f"test_command was not runnable{detail}"
+
+
+def _safe_test_command(command: list[str]) -> bool:
+    executable = Path(command[0]).name
+    args = command[1:]
+    if executable in {"python", "python3"}:
+        if len(args) >= 2 and args[:2] == ["-m", "unittest"]:
+            return _safe_unittest_args(args[2:])
+        if len(args) >= 2 and args[:2] == ["-m", "pytest"]:
+            return _safe_pytest_args(args[2:])
+        if len(args) == 1 and args[0].startswith("tests/") and args[0].endswith(".py"):
+            return _safe_relative_test_path(args[0])
+        return False
+    return executable in {"pytest", "py.test"} and _safe_pytest_args(args)
+
+
+def _safe_unittest_args(args: list[str]) -> bool:
+    if not args:
+        return True
+    if args[0] == "discover":
+        return _safe_unittest_discover_args(args[1:])
+    return len(args) == 1 and (_safe_relative_test_path(args[0]) or _safe_unittest_module(args[0]))
+
+
+def _safe_unittest_discover_args(args: list[str]) -> bool:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in {"-s", "--start-directory", "-t", "--top-level-directory"}:
+            if index + 1 >= len(args) or not _safe_relative_test_dir(args[index + 1]):
+                return False
+            index += 2
+            continue
+        if arg in {"-p", "--pattern"}:
+            if index + 1 >= len(args) or not _safe_test_pattern(args[index + 1]):
+                return False
+            index += 2
+            continue
+        if arg in {"-v", "--verbose", "-q", "--quiet"}:
+            index += 1
+            continue
+        return False
+    return True
+
+
+def _safe_pytest_args(args: list[str]) -> bool:
+    allowed_flags = {"-q", "-v", "-vv", "-x", "-s", "--tb=short", "--disable-warnings"}
+    return all(arg in allowed_flags or _safe_relative_test_path(arg) or _safe_relative_test_dir(arg) for arg in args)
+
+
+def _safe_relative_test_path(value: str) -> bool:
+    path = Path(value)
+    return not path.is_absolute() and ".." not in path.parts and value.startswith("tests/") and value.endswith(".py")
+
+
+def _safe_relative_test_dir(value: str) -> bool:
+    path = Path(value)
+    return not path.is_absolute() and ".." not in path.parts and (value == "tests" or value.startswith("tests/"))
+
+
+def _safe_test_pattern(value: str) -> bool:
+    return "/" not in value and "\\" not in value and value.endswith(".py") and ".." not in value
+
+
+def _safe_unittest_module(value: str) -> bool:
+    return bool(re.fullmatch(r"tests(?:\.[A-Za-z_][A-Za-z0-9_]*)+", value))
 
 
 def _score_repo_read_only(task: TaskSpec, workspace: Path, response: BackendResponse, changed: list[str]) -> list[tuple[bool, str]]:

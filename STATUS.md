@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-01 21:45 UTC
+Last updated: 2026-05-01 22:49 UTC
 
 ## Runtime
 
@@ -73,71 +73,74 @@ The repo needs a full local-provider setup test suite before this is considered 
 - OpenClaw route smoke works after disabling Qwen thinking in generated local vLLM config:
   - provider model: `reasoning=false`
   - agent params: `chatTemplateKwargs.enable_thinking=false`
-- Unit tests pass locally: `python3 -m unittest discover -s tests` ran `202` tests.
-- Unit tests pass inside `oc-stack` from the staged repo snapshot: `202` tests.
+- Unit tests pass locally after the M1 scoring fix: `python3 -m unittest discover -s tests` ran `207` tests.
+- Simulator full-suite regression passes after the M1 scoring fix:
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m1-trust-main2 --run-id cert-a`
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m1-trust-main2 --run-id cert-b`
+  - Both runs produced `40` attempts, `0` failures, and identical stable score/status fields.
+- Unit tests pass inside `oc-stack` from the staged repo snapshot `/tmp/openclaw-local-model-bench-m1-20260501223912`: `207` tests.
 
 ## Latest E2E
 
 Latest staged repo:
 
 ```text
-/tmp/openclaw-local-model-bench-qwen35-20260501212915
+/tmp/openclaw-local-model-bench-m1-20260501223912
 ```
 
 Latest result directory:
 
 ```text
-/tmp/oc-bench-root-qwen35-20260501212915/results/e2e-qwen35-20260501212915
+/tmp/oc-bench-root-m1-20260501223912/results/live-m1-qwen35-rerun-20260501225000
 ```
 
 Result summary:
 
-- Preflight: pass
-- vLLM health: pass
-- vLLM direct route probe: pass
-- OpenClaw route smoke: pass
+- Live anchor rerun complete.
+- Log: `/tmp/live-m1-qwen35-rerun-20260501225000.log`
+- Gateway startup: pass.
+- vLLM health: pass.
+- vLLM direct route probe: pass.
+- OpenClaw route smoke: pass.
 - Benchmark attempts: `1`
-- Benchmark failures: `1`
-- Failure type: `wrong_file`
-- Score: `0.7143`
-- Pass rate: `0%`
-- Wall time: `200.306s`
+- Benchmark failures: `0`
+- Failure type: none
+- Score: `1.0`
+- Pass rate: `100%`
+- Wall time: `200.328s`
 - Tool calls: `10`
-
-The model used OpenClaw successfully and found:
-
-- `api/routes.py`
-- `db/schema.py`
-
-It failed because it returned the test command as `tests/test_api.py` instead of the expected runnable command.
+- OpenClaw version for the staged run: `OpenClaw 2026.4.27 (cbc2ba0)`.
+- Live anchor record: run id `live-m1-qwen35-rerun-20260501225000`, model `qwen3.5-4b`, KV mode `provider_default`, context `32768`, concurrency `1`, date `2026-05-01`.
+- The model returned a runnable equivalent command:
+  - `python tests/test_api.py`
+- Prior post-fix live run: `/tmp/oc-bench-root-m1-20260501223143/results/live-m1-qwen35-20260501223143`
+  - Preflight: pass
+  - vLLM health: pass
+  - vLLM direct route probe: pass
+  - OpenClaw route smoke: pass
+  - Benchmark attempts: `1`
+  - Benchmark failures: `1`
+  - Failure type: `wrong_file`
+  - Score: `0.8333`
+  - Wall time: `164.179s`
+  - Tool calls: `8`
+  - Diagnosis: scorer still rejected runnable unittest module command `python -m unittest tests.test_api`; this has been fixed and covered by `test_discovery_accepts_unittest_module_command`.
 
 ## Resume Point
 
-The init/preflight/service setup is no longer the blocker. Resume from `oc-bench run` against the existing suite/model config, with a new run id, instead of rerunning full quickstart unless profile/config generation is being tested.
+M1 trust hygiene has its regression tests, simulator E2E proof, scoring-rule intent comments, and live-anchor record. Next milestone is M2 unless the completion audit finds a gap.
 
-Use the staged repo path above or restage the current tree into `oc-stack`, then run from the staged repo with:
+The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
+
+Inspect the latest live anchor with:
 
 ```bash
-HOME=/tmp/oc-bench-home-qwen35-20260501212915 \
-python3 -m openclaw_bench run \
-  --suite /tmp/oc-bench-root-qwen35-20260501212915/manifests/starter-suite.json \
-  --model-config /tmp/oc-bench-root-qwen35-20260501212915/manifests/starter-models.json \
-  --out /tmp/oc-bench-root-qwen35-20260501212915/results \
-  --workspace-root /tmp/oc-bench-root-qwen35-20260501212915/workspaces/quickstart \
-  --fixtures-root /tmp/oc-bench-root-qwen35-20260501212915/fixtures \
-  --backend openclaw \
-  --openclaw-profile benchclaw-e2e-qwen35-20260501212915 \
-  --openclaw-agent bench \
-  --openclaw-workspace-agents \
-  --ensure-openclaw-gateway \
-  --openclaw-gateway-timeout 120 \
-  --openclaw-smoke-timeout 120 \
-  --timeout 600 \
-  --run-id e2e-qwen35-resume-$(date -u +%Y%m%d%H%M%S)
+incus exec oc-stack -- bash -lc "tail -n 120 /tmp/live-m1-qwen35-rerun-20260501225000.log"
+incus exec oc-stack -- bash -lc "jq . /tmp/oc-bench-root-m1-20260501223912/results/live-m1-qwen35-rerun-20260501225000/summary.json"
+incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/results/live-m1-qwen35-rerun-20260501225000/attempts.jsonl"
 ```
 
 ## Open Items
 
-- Decide whether the discovery task should accept `tests/test_api.py` as a partial command answer or require the exact runnable command.
-- If the exact runnable command is required, improve prompt/task scoring pressure rather than changing the model route again.
-- Consider trying a quantized 4B or a larger better-instructed model; the current Qwen3.5-4B is BF16 and functional but did not pass the first benchmark task.
+- Run the completion audit for M1 before moving to M2.
+- The two-attempt cap was reached for the `workspace_discovery` command scorer in this iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.

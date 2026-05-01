@@ -87,6 +87,57 @@ class ScoringTests(unittest.TestCase):
             self.assertEqual(hallucinated, 0)
             self.assertIn("test_command was not runnable", notes)
 
+    def test_discovery_accepts_equivalent_runnable_test_command(self):
+        suite = load_suite(ROOT / "manifests" / "openclaw-agent-core.json")
+        task = next(item for item in suite.tasks if item.task_id == "workspace-discovery")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            payload = {
+                "test_command": "python -m unittest discover -s tests -p test_api.py",
+                "routes_file": "api/routes.py",
+                "schema_file": "db/schema.py",
+            }
+            response = BackendResponse(text="", json_output=payload, raw={})
+            score, failure, hallucinated, notes = score_task(task, workspace, response, [], True)
+            self.assertEqual(score, 1.0, notes)
+            self.assertIsNone(failure)
+            self.assertEqual(hallucinated, 0)
+
+    def test_discovery_accepts_python_test_file_command(self):
+        suite = load_suite(ROOT / "manifests" / "openclaw-agent-core.json")
+        task = next(item for item in suite.tasks if item.task_id == "workspace-discovery")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            payload = {
+                "test_command": "python tests/test_api.py",
+                "routes_file": "api/routes.py",
+                "schema_file": "db/schema.py",
+            }
+            response = BackendResponse(text="", json_output=payload, raw={})
+            score, failure, hallucinated, notes = score_task(task, workspace, response, [], True)
+            self.assertEqual(score, 1.0, notes)
+            self.assertIsNone(failure)
+            self.assertEqual(hallucinated, 0)
+
+    def test_discovery_accepts_unittest_module_command(self):
+        suite = load_suite(ROOT / "manifests" / "openclaw-agent-core.json")
+        task = next(item for item in suite.tasks if item.task_id == "workspace-discovery")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            payload = {
+                "test_command": "python -m unittest tests.test_api",
+                "routes_file": "api/routes.py",
+                "schema_file": "db/schema.py",
+            }
+            response = BackendResponse(text="", json_output=payload, raw={})
+            score, failure, hallucinated, notes = score_task(task, workspace, response, [], True)
+            self.assertEqual(score, 1.0, notes)
+            self.assertIsNone(failure)
+            self.assertEqual(hallucinated, 0)
+
     def test_discovery_does_not_execute_unexpected_test_command(self):
         suite = load_suite(ROOT / "manifests" / "openclaw-agent-core.json")
         task = next(item for item in suite.tasks if item.task_id == "workspace-discovery")
@@ -105,7 +156,43 @@ class ScoringTests(unittest.TestCase):
             self.assertEqual(failure, "wrong_file")
             self.assertEqual(hallucinated, 0)
             self.assertFalse(marker.exists())
-            self.assertIn("test_command was not executed", notes)
+            self.assertIn("test_command was not a safe test command", notes)
+
+    def test_discovery_rejects_bare_test_file_as_command(self):
+        suite = load_suite(ROOT / "manifests" / "openclaw-agent-core.json")
+        task = next(item for item in suite.tasks if item.task_id == "workspace-discovery")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            payload = {
+                "test_command": "tests/test_api.py",
+                "routes_file": "api/routes.py",
+                "schema_file": "db/schema.py",
+            }
+            response = BackendResponse(text="", json_output=payload, raw={})
+            score, failure, hallucinated, notes = score_task(task, workspace, response, [], True)
+            self.assertLess(score, 1.0)
+            self.assertEqual(failure, "wrong_file")
+            self.assertEqual(hallucinated, 0)
+            self.assertIn("test_command was not a safe test command", notes)
+
+    def test_discovery_rejects_test_command_outside_workspace_tests(self):
+        suite = load_suite(ROOT / "manifests" / "openclaw-agent-core.json")
+        task = next(item for item in suite.tasks if item.task_id == "workspace-discovery")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            payload = {
+                "test_command": "python -m unittest discover -s /tmp",
+                "routes_file": "api/routes.py",
+                "schema_file": "db/schema.py",
+            }
+            response = BackendResponse(text="", json_output=payload, raw={})
+            score, failure, hallucinated, notes = score_task(task, workspace, response, [], True)
+            self.assertLess(score, 1.0)
+            self.assertEqual(failure, "wrong_file")
+            self.assertEqual(hallucinated, 0)
+            self.assertIn("test_command was not a safe test command", notes)
 
     def test_repo_read_only_scores_expected_answer_and_evidence(self):
         suite = load_suite(ROOT / "manifests" / "real-repo-readonly.example.json")
