@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-01 23:00 UTC
+Last updated: 2026-05-01 23:08 UTC
 
 ## Runtime
 
@@ -144,14 +144,19 @@ First M2 slice in progress:
   - `manifests/tier-medium.json`
 - Added manifest and simulator smoke coverage for those suites.
 - This is not full M2 completion. Missing M2 work remains:
-  - `tier-large.json` and `tier-xlarge.json`
+  - `tier-xlarge.json`
   - floor/ceiling calibration records for every tier
-  - task-gap coverage for destructive-action refusal, plan/action coherence, cross-file consistency, AGENTS/SOUL adherence, format drift after 10+ tool calls, and ambiguous-spec triage
+  - task-gap coverage for destructive-action refusal, plan/action coherence, AGENTS/SOUL adherence, format drift after 10+ tool calls, and ambiguous-spec triage
   - per-task tool-loop / stop-condition scoring
 - Added first task-gap slice:
   - `fixtures/tool_error_recovery_repo`
   - `medium-tool-error-recovery-route-map` in `manifests/tier-medium.json`
   - Targeted manifest + simulator tests pass.
+- Added cross-file consistency slice:
+  - `fixtures/cross_file_consistency_repo`
+  - `manifests/tier-large.json`
+  - `large-cross-file-sale-rate`
+  - Targeted scorer + manifest + simulator tests pass.
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
@@ -165,5 +170,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 
 ## Open Items
 
-- Add the next M2 task-gap slice. Recommended next: cross-file consistency or calibration record schema planning before floor/ceiling runs.
+- Add the next M2 task-gap slice. Recommended next: calibration record schema planning before floor/ceiling runs, or AGENTS/SOUL adherence.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.

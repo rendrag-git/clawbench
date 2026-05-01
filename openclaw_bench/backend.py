@@ -211,6 +211,30 @@ class SimulatorBackend(AgentBackend):
                 time_to_first_relevant_file_s=0.3,
             )
 
+        if task.task_type == "cross_file_consistency":
+            pricing = workspace / "app" / "pricing.py"
+            labels = workspace / "app" / "labels.py"
+            pricing.write_text(
+                "HOLIDAY_DISCOUNT_RATE = 0.15\n\n\n"
+                "def sale_total(subtotal):\n"
+                "    return round(float(subtotal) * (1 - HOLIDAY_DISCOUNT_RATE), 2)\n",
+                encoding="utf-8",
+            )
+            labels.write_text(
+                "def sale_banner():\n"
+                "    return \"Holiday sale: 15% off\"\n",
+                encoding="utf-8",
+            )
+            return BackendResponse(
+                text="Updated app/pricing.py and app/labels.py with the same holiday sale rate.",
+                json_output=None,
+                raw={"simulated": True, "session_id": session_id},
+                tool_calls=6,
+                files_read=4,
+                duplicate_file_reads=1,
+                time_to_first_relevant_file_s=0.4,
+            )
+
         if task.task_type == "workspace_needle":
             token = _read_needle(workspace)
             health = workspace / "app" / "health.py"

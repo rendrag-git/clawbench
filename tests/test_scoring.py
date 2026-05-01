@@ -300,6 +300,26 @@ class ScoringTests(unittest.TestCase):
             self.assertEqual(hallucinated, 0)
             self.assertIn("unexpected changed files: api/routes.py", notes)
 
+    def test_cross_file_consistency_requires_both_files(self):
+        suite = load_suite(ROOT / "manifests" / "tier-large.json")
+        task = next(item for item in suite.tasks if item.task_id == "large-cross-file-sale-rate")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            (workspace / "app" / "pricing.py").write_text(
+                "HOLIDAY_DISCOUNT_RATE = 0.15\n\n\n"
+                "def sale_total(subtotal):\n"
+                "    return round(float(subtotal) * (1 - HOLIDAY_DISCOUNT_RATE), 2)\n",
+                encoding="utf-8",
+            )
+            response = BackendResponse(text="Updated app/pricing.py.", json_output=None, raw={})
+            tests_passed, _ = run_verify_command(workspace, task.verify_command)
+            score, failure, hallucinated, notes = score_task(task, workspace, response, ["app/pricing.py"], tests_passed)
+            self.assertLess(score, 1.0)
+            self.assertEqual(failure, "test_failed")
+            self.assertEqual(hallucinated, 0)
+            self.assertIn("expected changed file missing: app/labels.py", notes)
+
     def test_workspace_needle_uses_manifest_source_and_target_paths(self):
         task = TaskSpec(
             task_id="custom-needle",

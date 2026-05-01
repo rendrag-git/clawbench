@@ -87,6 +87,16 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual({tuple(task.context_sizes) for task in suite.tasks if task.context_sizes}, {(16384,), (32768,)})
         self.assertTrue(all("tier-medium" in task.tags for task in suite.tasks))
 
+    def test_load_tier_large_suite(self):
+        suite = load_suite(ROOT / "manifests" / "tier-large.json")
+        self.assertEqual(suite.suite_id, "tier-large")
+        self.assertEqual(
+            [task.task_id for task in suite.tasks],
+            ["large-cross-file-sale-rate", "large-workspace-needle-64k"],
+        )
+        self.assertEqual({task.task_type for task in suite.tasks}, {"cross_file_consistency", "workspace_needle"})
+        self.assertTrue(all("tier-large" in task.tags for task in suite.tasks))
+
     def test_load_vllm_local_candidates(self):
         models = load_model_specs(ROOT / "manifests" / "vllm-local-candidates.example.json")
         self.assertEqual(len(models), 10)

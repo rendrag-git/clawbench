@@ -1,0 +1,46 @@
+{
+  "suite_id": "tier-large",
+  "tasks": [
+    {
+      "task_id": "large-cross-file-sale-rate",
+      "task_type": "cross_file_consistency",
+      "fixture": "cross_file_consistency_repo",
+      "prompt": "Update the holiday sale from 10% to 15%. Keep the pricing calculation and customer-facing sale label consistent with each other. Make the smallest production code changes and do not edit tests.",
+      "expected": {
+        "changed_files": ["app/pricing.py", "app/labels.py"],
+        "behavior_checks": [
+          {
+            "call": "app.pricing.sale_total",
+            "args": [100],
+            "equals": 85.0
+          },
+          {
+            "call": "app.labels.sale_banner",
+            "args": [],
+            "equals": "Holiday sale: 15% off"
+          }
+        ]
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "max_changed_files": 2,
+      "tags": ["tier-large", "cross-file-consistency", "patch"]
+    },
+    {
+      "task_id": "large-workspace-needle-64k",
+      "task_type": "workspace_needle",
+      "fixture": "needle_repo_64k",
+      "prompt": "Find the current value of BENCHMARK_NEEDLE_TOKEN in the workspace and use it to update the health endpoint response. Do not guess; cite the file where you found it.",
+      "expected": {
+        "needle": "oc_bench_real_token_64k_6173",
+        "distractor": "oc_bench_distractor_64k_0000",
+        "source_file": "app/config_notes.py",
+        "target_file": "app/health.py",
+        "min_fixture_chars": 65536
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "context_sizes": [65536],
+      "max_changed_files": 2,
+      "tags": ["tier-large", "needle", "retrieval", "long-context"]
+    }
+  ]
+}

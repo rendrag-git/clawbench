@@ -71,6 +71,12 @@ def score_task(task: TaskSpec, workspace: Path, response: BackendResponse, chang
         checks.extend(_score_no_unexpected_changes(task, changed))
         checks.extend(_score_behavior_checks(task, workspace))
         checks.append((tests_passed, "verification command failed"))
+    elif task.task_type == "cross_file_consistency":
+        # Intent: keep one logical change consistent across every required production file.
+        checks.extend(_score_expected_changed_files(task, changed))
+        checks.extend(_score_no_unexpected_changes(task, changed))
+        checks.extend(_score_behavior_checks(task, workspace))
+        checks.append((tests_passed, "verification command failed"))
     elif task.task_type == "workspace_needle":
         # Intent: retrieve the real needle, update the target file, cite the source, and avoid distractors.
         expected_token = task.expected.get("needle")

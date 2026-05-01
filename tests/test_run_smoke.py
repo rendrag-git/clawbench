@@ -369,6 +369,42 @@ class RunSmokeTests(unittest.TestCase):
             )
             self.assertTrue(all(row["status"] == "pass" for row in attempts))
 
+    def test_tier_large_simulator_run_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "results"
+            cmd = [
+                sys.executable,
+                "-m",
+                "openclaw_bench",
+                "run",
+                "--backend",
+                "simulator",
+                "--suite",
+                str(ROOT / "manifests" / "tier-large.json"),
+                "--models",
+                "simulated-model",
+                "--kv",
+                "fp8",
+                "--concurrency",
+                "1",
+                "--contexts",
+                "65536",
+                "--out",
+                str(out),
+                "--run-id",
+                "tier-large",
+            ]
+            proc = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            run_dir = out / "tier-large"
+            attempts = [
+                json.loads(line)
+                for line in (run_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual({row["task_id"] for row in attempts}, {"large-cross-file-sale-rate", "large-workspace-needle-64k"})
+            self.assertTrue(all(row["status"] == "pass" for row in attempts))
+
     def test_matrix_run_writes_one_raw_and_patch_artifact_per_attempt(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "results"
