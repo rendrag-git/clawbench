@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-01 23:59 UTC
+Last updated: 2026-05-02 00:11 UTC
 
 ## Runtime
 
@@ -105,6 +105,11 @@ The repo needs a full local-provider setup test suite before this is considered 
   - `medium-agents-soul-adherence`
   - `python3 -m unittest discover -s tests` ran `224` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-adherence-verify --run-id cert-full` produced `40` attempts, `0` failures.
+- M2 calibration schema slice in progress:
+  - `openclaw_bench/calibration.py`
+  - `tests/test_calibration.py`
+  - `python3 -m unittest discover -s tests` ran `230` tests.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-calibration-schema-verify --run-id cert-full` produced `40` attempts, `0` failures.
 
 ## Latest E2E
 
@@ -163,7 +168,7 @@ First M2 slice in progress:
   - `manifests/tier-medium.json`
 - Added manifest and simulator smoke coverage for those suites.
 - This is not full M2 completion. Missing M2 work remains:
-  - floor/ceiling calibration records for every tier
+  - live floor/ceiling calibration records for every tier
   - task-gap coverage for plan/action coherence and format drift after 10+ tool calls
 - Added first task-gap slice:
   - `fixtures/tool_error_recovery_repo`
@@ -194,6 +199,12 @@ First M2 slice in progress:
   - `agents_soul_adherence` scoring enforces the expected patch, seeded policy evidence, seed-file preservation, JSON final response, behavior checks, and verification.
   - Full unit and simulator regressions pass.
   - Committed as `80309c0`.
+- Added calibration schema validation slice:
+  - `openclaw_bench/calibration.py`
+  - `tests/test_calibration.py`
+  - Validates complete small/medium/large/xlarge floor and ceiling records, thresholds, date/SHA shape, and optional attempts.jsonl score cross-checking.
+  - Full unit and simulator regressions pass.
+  - Does not fabricate live records; actual floor/ceiling records still require live anchor data.
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
@@ -207,5 +218,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 
 ## Open Items
 
-- Add the next M2 task-gap slice. Recommended next: calibration record schema planning, format-drift under length, or plan/action coherence.
+- Add the next M2 task-gap slice. Recommended next: format-drift under length or plan/action coherence. Live calibration records still require anchor runs.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
