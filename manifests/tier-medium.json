@@ -1,0 +1,84 @@
+{
+  "suite_id": "tier-medium",
+  "tasks": [
+    {
+      "task_id": "medium-multi-file-bug-trace",
+      "task_type": "multi_file_bug_trace",
+      "fixture": "bug_trace_repo",
+      "prompt": "Find why the VIP discount test fails. Explain the bug path with file references, then make the smallest code change to fix it. Do not change tests unless the test is wrong.",
+      "expected": {
+        "changed_files": ["app/discounts.py"],
+        "bug_path_files": ["tests/test_discount.py", "app/routes.py", "app/discounts.py"],
+        "behavior_checks": [
+          {
+            "call": "app.routes.checkout_total",
+            "args": [{"tier": "standard"}, 100.0],
+            "equals": 100.0
+          },
+          {
+            "call": "app.routes.checkout_total",
+            "args": [{"tier": "vip"}, 250.0],
+            "equals": 225.0
+          }
+        ]
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "max_changed_files": 2,
+      "tags": ["tier-medium", "patch", "reasoning", "bug-trace"]
+    },
+    {
+      "task_id": "medium-instruction-retention",
+      "task_type": "instruction_retention",
+      "fixture": "instruction_repo",
+      "prompt": "Constraints: do not edit tests; do not add dependencies; return final answer as JSON; use the existing helper instead of adding a new abstraction. Update render_status so it normalizes status values correctly.",
+      "expected": {
+        "changed_files": ["app/service.py"],
+        "target_file": "app/service.py",
+        "helper_file": "app/helpers.py",
+        "helper_symbol": "normalize_status",
+        "behavior_checks": [
+          {
+            "call": "app.service.render_status",
+            "args": [" Awaiting Approval "],
+            "equals": {"status": "awaiting_approval"}
+          }
+        ]
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "max_changed_files": 2,
+      "tags": ["tier-medium", "instruction", "patch", "strict-json"]
+    },
+    {
+      "task_id": "medium-workspace-needle-16k",
+      "task_type": "workspace_needle",
+      "fixture": "needle_repo_16k",
+      "prompt": "Find the current value of BENCHMARK_NEEDLE_TOKEN in the workspace and use it to update the health endpoint response. Do not guess; cite the file where you found it.",
+      "expected": {
+        "needle": "oc_bench_real_token_16k_5284",
+        "distractor": "oc_bench_distractor_16k_0000",
+        "source_file": "app/config_notes.py",
+        "target_file": "app/health.py"
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "context_sizes": [16384],
+      "max_changed_files": 2,
+      "tags": ["tier-medium", "needle", "retrieval", "long-context"]
+    },
+    {
+      "task_id": "medium-workspace-needle-32k",
+      "task_type": "workspace_needle",
+      "fixture": "needle_repo_32k",
+      "prompt": "Find the current value of BENCHMARK_NEEDLE_TOKEN in the workspace and use it to update the health endpoint response. Do not guess; cite the file where you found it.",
+      "expected": {
+        "needle": "oc_bench_real_token_32k_9047",
+        "distractor": "oc_bench_distractor_32k_0000",
+        "source_file": "app/config_notes.py",
+        "target_file": "app/health.py"
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "context_sizes": [32768],
+      "max_changed_files": 2,
+      "tags": ["tier-medium", "needle", "retrieval", "long-context"]
+    }
+  ]
+}

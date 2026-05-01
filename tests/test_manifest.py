@@ -57,6 +57,35 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("repo_read_only", task_types)
         self.assertIn("repo_code_edit", task_types)
 
+    def test_load_tier_small_suite(self):
+        suite = load_suite(ROOT / "manifests" / "tier-small.json")
+        self.assertEqual(suite.suite_id, "tier-small")
+        self.assertEqual(
+            [task.task_id for task in suite.tasks],
+            ["small-workspace-discovery", "small-patch-execution", "small-workspace-needle-4k"],
+        )
+        self.assertEqual({task.task_type for task in suite.tasks}, {"workspace_discovery", "patch_execution", "workspace_needle"})
+        self.assertTrue(all("tier-small" in task.tags for task in suite.tasks))
+
+    def test_load_tier_medium_suite(self):
+        suite = load_suite(ROOT / "manifests" / "tier-medium.json")
+        self.assertEqual(suite.suite_id, "tier-medium")
+        self.assertEqual(
+            [task.task_id for task in suite.tasks],
+            [
+                "medium-multi-file-bug-trace",
+                "medium-instruction-retention",
+                "medium-workspace-needle-16k",
+                "medium-workspace-needle-32k",
+            ],
+        )
+        self.assertEqual(
+            {task.task_type for task in suite.tasks},
+            {"multi_file_bug_trace", "instruction_retention", "workspace_needle"},
+        )
+        self.assertEqual({tuple(task.context_sizes) for task in suite.tasks if task.context_sizes}, {(16384,), (32768,)})
+        self.assertTrue(all("tier-medium" in task.tags for task in suite.tasks))
+
     def test_load_vllm_local_candidates(self):
         models = load_model_specs(ROOT / "manifests" / "vllm-local-candidates.example.json")
         self.assertEqual(len(models), 10)

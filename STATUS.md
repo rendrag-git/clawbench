@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-01 22:49 UTC
+Last updated: 2026-05-01 22:56 UTC
 
 ## Runtime
 
@@ -79,6 +79,10 @@ The repo needs a full local-provider setup test suite before this is considered 
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m1-trust-main2 --run-id cert-b`
   - Both runs produced `40` attempts, `0` failures, and identical stable score/status fields.
 - Unit tests pass inside `oc-stack` from the staged repo snapshot `/tmp/openclaw-local-model-bench-m1-20260501223912`: `207` tests.
+- M2 tier-manifest slice tests pass locally:
+  - `python3 -m unittest discover -s tests` ran `211` tests.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-tier-slice-verify --run-id cert-full` produced `40` attempts, `0` failures.
+  - Targeted simulator smoke tests pass for `manifests/tier-small.json` and `manifests/tier-medium.json`.
 
 ## Latest E2E
 
@@ -128,7 +132,19 @@ Result summary:
 
 ## Resume Point
 
-M1 trust hygiene has its regression tests, simulator E2E proof, scoring-rule intent comments, and live-anchor record. Next milestone is M2 unless the completion audit finds a gap.
+M1 trust hygiene is complete. Active milestone: M2 tiered, discriminating task suite.
+
+First M2 slice in progress:
+
+- Added explicit additive tier manifests:
+  - `manifests/tier-small.json`
+  - `manifests/tier-medium.json`
+- Added manifest and simulator smoke coverage for those suites.
+- This is not full M2 completion. Missing M2 work remains:
+  - `tier-large.json` and `tier-xlarge.json`
+  - floor/ceiling calibration records for every tier
+  - task-gap coverage for tool-error recovery, destructive-action refusal, plan/action coherence, cross-file consistency, AGENTS/SOUL adherence, format drift after 10+ tool calls, and ambiguous-spec triage
+  - per-task tool-loop / stop-condition scoring
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
@@ -142,5 +158,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 
 ## Open Items
 
-- Run the completion audit for M1 before moving to M2.
-- The two-attempt cap was reached for the `workspace_discovery` command scorer in this iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
+- Add the next M2 task-gap slice. Recommended next: a tool-error-recovery task using existing `repo_read_only` scoring, plus calibration record schema planning before floor/ceiling runs.
+- The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.

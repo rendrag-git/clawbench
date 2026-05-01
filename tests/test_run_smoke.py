@@ -288,6 +288,86 @@ class RunSmokeTests(unittest.TestCase):
             summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["pass_rate"], 1.0)
 
+    def test_tier_small_simulator_run_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "results"
+            cmd = [
+                sys.executable,
+                "-m",
+                "openclaw_bench",
+                "run",
+                "--backend",
+                "simulator",
+                "--suite",
+                str(ROOT / "manifests" / "tier-small.json"),
+                "--models",
+                "simulated-model",
+                "--kv",
+                "fp8",
+                "--concurrency",
+                "1",
+                "--contexts",
+                "4096",
+                "--out",
+                str(out),
+                "--run-id",
+                "tier-small",
+            ]
+            proc = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            run_dir = out / "tier-small"
+            attempts = [
+                json.loads(line)
+                for line in (run_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(len(attempts), 3)
+            self.assertEqual({row["task_id"] for row in attempts}, {"small-workspace-discovery", "small-patch-execution", "small-workspace-needle-4k"})
+            self.assertTrue(all(row["status"] == "pass" for row in attempts))
+
+    def test_tier_medium_simulator_run_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "results"
+            cmd = [
+                sys.executable,
+                "-m",
+                "openclaw_bench",
+                "run",
+                "--backend",
+                "simulator",
+                "--suite",
+                str(ROOT / "manifests" / "tier-medium.json"),
+                "--models",
+                "simulated-model",
+                "--kv",
+                "fp8",
+                "--concurrency",
+                "1",
+                "--contexts",
+                "16384,32768",
+                "--out",
+                str(out),
+                "--run-id",
+                "tier-medium",
+            ]
+            proc = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            run_dir = out / "tier-medium"
+            attempts = [
+                json.loads(line)
+                for line in (run_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(len(attempts), 6)
+            self.assertEqual(
+                {row["task_id"] for row in attempts},
+                {
+                    "medium-multi-file-bug-trace",
+                    "medium-instruction-retention",
+                    "medium-workspace-needle-16k",
+                    "medium-workspace-needle-32k",
+                },
+            )
+            self.assertTrue(all(row["status"] == "pass" for row in attempts))
+
     def test_matrix_run_writes_one_raw_and_patch_artifact_per_attempt(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "results"

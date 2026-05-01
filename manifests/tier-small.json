@@ -1,0 +1,58 @@
+{
+  "suite_id": "tier-small",
+  "tasks": [
+    {
+      "task_id": "small-workspace-discovery",
+      "task_type": "workspace_discovery",
+      "fixture": "discovery_repo",
+      "prompt": "In this workspace, identify the command that runs the API tests, the file that defines the API routes, and the file that defines the database schema. Return only JSON with keys test_command, routes_file, schema_file.",
+      "expected": {
+        "test_command": "python -m unittest discover -s tests",
+        "routes_file": "api/routes.py",
+        "schema_file": "db/schema.py"
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "tags": ["tier-small", "discovery", "strict-json", "smoke"]
+    },
+    {
+      "task_id": "small-patch-execution",
+      "task_type": "patch_execution",
+      "fixture": "patch_repo",
+      "prompt": "Implement the missing slugify behavior so the existing tests pass. Make the smallest production code change and do not edit tests.",
+      "expected": {
+        "changed_files": ["app/slug.py"],
+        "behavior_checks": [
+          {
+            "call": "app.slug.slugify",
+            "args": ["OpenClaw___Bench 2026"],
+            "equals": "openclaw-bench-2026"
+          },
+          {
+            "call": "app.slug.slugify",
+            "args": ["  multi word/value_test  "],
+            "equals": "multi-word-value-test"
+          }
+        ]
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "max_changed_files": 2,
+      "tags": ["tier-small", "single-file", "patch"]
+    },
+    {
+      "task_id": "small-workspace-needle-4k",
+      "task_type": "workspace_needle",
+      "fixture": "needle_repo",
+      "prompt": "Find the current value of BENCHMARK_NEEDLE_TOKEN in the workspace and use it to update the health endpoint response. Do not guess; cite the file where you found it.",
+      "expected": {
+        "needle": "oc_bench_real_token_7319",
+        "distractor": "oc_bench_distractor_0000",
+        "source_file": "app/config_notes.py",
+        "target_file": "app/health.py"
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "context_sizes": [4096],
+      "max_changed_files": 2,
+      "tags": ["tier-small", "needle", "retrieval"]
+    }
+  ]
+}
