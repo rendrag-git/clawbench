@@ -110,7 +110,7 @@ Result summary:
 - Wall time: `200.328s`
 - Tool calls: `10`
 - OpenClaw version for the staged run: `OpenClaw 2026.4.27 (cbc2ba0)`.
-- Live anchor record: run id `live-m1-qwen35-rerun-20260501225000`, model `qwen3.5-4b`, KV mode `provider_default`, context `32768`, concurrency `1`, date `2026-05-01`.
+- Live anchor record: run id `live-m1-qwen35-rerun-20260501225000`, code commit `a9fd98b`, model `qwen3.5-4b`, KV mode `provider_default`, context `32768`, concurrency `1`, date `2026-05-01`.
 - The model returned a runnable equivalent command:
   - `python tests/test_api.py`
 - Prior post-fix live run: `/tmp/oc-bench-root-m1-20260501223143/results/live-m1-qwen35-20260501223143`
