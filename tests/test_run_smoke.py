@@ -405,6 +405,42 @@ class RunSmokeTests(unittest.TestCase):
             self.assertEqual({row["task_id"] for row in attempts}, {"large-cross-file-sale-rate", "large-workspace-needle-64k"})
             self.assertTrue(all(row["status"] == "pass" for row in attempts))
 
+    def test_tier_xlarge_simulator_run_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "results"
+            cmd = [
+                sys.executable,
+                "-m",
+                "openclaw_bench",
+                "run",
+                "--backend",
+                "simulator",
+                "--suite",
+                str(ROOT / "manifests" / "tier-xlarge.json"),
+                "--models",
+                "simulated-model",
+                "--kv",
+                "fp8",
+                "--concurrency",
+                "1",
+                "--contexts",
+                "131072",
+                "--out",
+                str(out),
+                "--run-id",
+                "tier-xlarge",
+            ]
+            proc = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            run_dir = out / "tier-xlarge"
+            attempts = [
+                json.loads(line)
+                for line in (run_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(len(attempts), 1)
+            self.assertEqual(attempts[0]["task_id"], "xlarge-workspace-needle-128k")
+            self.assertEqual(attempts[0]["status"], "pass")
+
     def test_matrix_run_writes_one_raw_and_patch_artifact_per_attempt(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "results"

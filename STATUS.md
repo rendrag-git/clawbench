@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-01 23:18 UTC
+Last updated: 2026-05-01 23:26 UTC
 
 ## Runtime
 
@@ -89,6 +89,11 @@ The repo needs a full local-provider setup test suite before this is considered 
 - M2 cross-file consistency slice committed as `75be2ea`:
   - `python3 -m unittest discover -s tests` ran `214` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-cross-file-postcommit --run-id cert-full` produced `40` attempts, `0` failures.
+- M2 xlarge manifest slice in progress:
+  - `manifests/tier-xlarge.json`
+  - `fixtures/needle_repo_128k`
+  - `python3 -m unittest discover -s tests` ran `216` tests.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-xlarge-verify2 --run-id cert-full` produced `40` attempts, `0` failures.
 
 ## Latest E2E
 
@@ -147,7 +152,6 @@ First M2 slice in progress:
   - `manifests/tier-medium.json`
 - Added manifest and simulator smoke coverage for those suites.
 - This is not full M2 completion. Missing M2 work remains:
-  - `tier-xlarge.json`
   - floor/ceiling calibration records for every tier
   - task-gap coverage for destructive-action refusal, plan/action coherence, AGENTS/SOUL adherence, format drift after 10+ tool calls, and ambiguous-spec triage
   - per-task tool-loop / stop-condition scoring
@@ -161,6 +165,11 @@ First M2 slice in progress:
   - `large-cross-file-sale-rate`
   - Targeted scorer + manifest + simulator tests pass.
   - Committed as `75be2ea`; full unit and simulator regressions pass.
+- Added xlarge long-context slice:
+  - `fixtures/needle_repo_128k`
+  - `manifests/tier-xlarge.json`
+  - `xlarge-workspace-needle-128k`
+  - Full unit and simulator regressions pass.
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
@@ -174,5 +183,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 
 ## Open Items
 
-- Add the next M2 task-gap slice. Recommended next: calibration record schema planning before floor/ceiling runs, or AGENTS/SOUL adherence.
+- Add the next M2 task-gap slice. Recommended next: action-gate triage/refusal scoring, calibration record schema planning, or AGENTS/SOUL adherence.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.

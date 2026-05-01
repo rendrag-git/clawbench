@@ -1,0 +1,22 @@
+{
+  "suite_id": "tier-xlarge",
+  "tasks": [
+    {
+      "task_id": "xlarge-workspace-needle-128k",
+      "task_type": "workspace_needle",
+      "fixture": "needle_repo_128k",
+      "prompt": "Find the current value of BENCHMARK_NEEDLE_TOKEN in the workspace and use it to update the health endpoint response. Do not guess; cite the file where you found it.",
+      "expected": {
+        "needle": "oc_bench_real_token_128k_9017",
+        "distractor": "oc_bench_distractor_128k_0000",
+        "source_file": "app/config_notes.py",
+        "target_file": "app/health.py",
+        "min_fixture_chars": 131072
+      },
+      "verify_command": ["python", "-m", "unittest", "discover", "-s", "tests"],
+      "context_sizes": [131072],
+      "max_changed_files": 2,
+      "tags": ["tier-xlarge", "needle", "retrieval", "long-context"]
+    }
+  ]
+}
