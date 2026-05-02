@@ -122,6 +122,50 @@ class RunSmokeTests(unittest.TestCase):
         self.assertFalse(config.ensure_openclaw_gateway)
         self.assertIsNone(config.openclaw_gateway_ensure)
 
+    def test_openclaw_run_stops_foreground_gateway_it_started(self):
+        args = _run_args(
+            backend="openclaw",
+            openclaw_local=False,
+            openclaw_container=None,
+            ensure_openclaw_container=False,
+            openclaw_workspace_agents=True,
+            ensure_openclaw_gateway=True,
+            run_id="started-gateway-run",
+        )
+        gateway_check = PreflightCheck("openclaw_gateway", "pass", "started bench gateway; Connectivity probe: ok")
+        stop_check = PreflightCheck("openclaw_gateway_stop", "pass", "stopped foreground gateway pid 1234")
+        with patch("openclaw_bench.cli.ensure_openclaw_gateway", return_value=gateway_check):
+            with patch("openclaw_bench.cli.stop_openclaw_gateway", return_value=stop_check) as stop_mock:
+                with patch("openclaw_bench.cli.BenchmarkRunner") as runner_cls:
+                    runner_cls.return_value.run.return_value = []
+                    with redirect_stdout(io.StringIO()) as stdout:
+                        code = run_command(args)
+
+        self.assertEqual(code, 0)
+        stop_mock.assert_called_once_with("bench", timeout_s=60)
+        self.assertIn("openclaw_gateway_stop=pass stopped foreground gateway pid 1234", stdout.getvalue())
+
+    def test_openclaw_run_leaves_already_running_gateway_alone(self):
+        args = _run_args(
+            backend="openclaw",
+            openclaw_local=False,
+            openclaw_container=None,
+            ensure_openclaw_container=False,
+            openclaw_workspace_agents=True,
+            ensure_openclaw_gateway=True,
+            run_id="existing-gateway-run",
+        )
+        gateway_check = PreflightCheck("openclaw_gateway", "pass", "already running; Connectivity probe: ok")
+        with patch("openclaw_bench.cli.ensure_openclaw_gateway", return_value=gateway_check):
+            with patch("openclaw_bench.cli.stop_openclaw_gateway") as stop_mock:
+                with patch("openclaw_bench.cli.BenchmarkRunner") as runner_cls:
+                    runner_cls.return_value.run.return_value = []
+                    with redirect_stdout(io.StringIO()):
+                        code = run_command(args)
+
+        self.assertEqual(code, 0)
+        stop_mock.assert_not_called()
+
     def test_openclaw_run_can_skip_container_ensure_for_supervised_runtimes(self):
         args = _run_args(
             backend="openclaw",

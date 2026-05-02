@@ -10,7 +10,7 @@ from .backend import make_backend
 from .container import DEFAULT_GATEWAY_PORT, DEFAULT_OPENCLAW_IMAGE, ensure_openclaw_container
 from .manifest import load_model_manifest_scope, load_model_specs, load_suite
 from .models import ModelSpec
-from .preflight import PreflightCheck, check_openclaw_version, ensure_openclaw_gateway, render_text, run_preflight
+from .preflight import PreflightCheck, check_openclaw_version, ensure_openclaw_gateway, render_text, run_preflight, stop_openclaw_gateway
 from .quickstart import (
     DEFAULT_AGENT,
     DEFAULT_PROFILE,
@@ -395,7 +395,13 @@ def run_command(args: argparse.Namespace) -> int:
         container=args.openclaw_container,
     )
     runner = BenchmarkRunner(backend)
-    results = runner.run(config)
+    stop_started_gateway = _started_local_foreground_gateway(args, gateway_ensure)
+    try:
+        results = runner.run(config)
+    finally:
+        if stop_started_gateway:
+            stop_check = stop_openclaw_gateway(args.openclaw_profile, timeout_s=args.openclaw_gateway_timeout)
+            print(f"{stop_check.name}={stop_check.status} {stop_check.notes}")
     failures = sum(1 for result in results if result.status != "pass")
     print(f"run_id={run_id}")
     print(f"out={out_dir}")
@@ -430,6 +436,15 @@ def _ensure_gateway_for_run(args: argparse.Namespace) -> dict[str, str] | None:
         raise ValueError(f"OpenClaw gateway is not ready: {check.notes}")
     print(f"{check.name}={check.status} {check.notes}")
     return check.to_row()
+
+
+def _started_local_foreground_gateway(args: argparse.Namespace, gateway_ensure: dict[str, str] | None) -> bool:
+    if args.backend != "openclaw" or args.openclaw_local or args.openclaw_container:
+        return False
+    if not gateway_ensure:
+        return False
+    notes = gateway_ensure.get("notes", "")
+    return "started bench gateway" in notes
 
 
 def preflight_command(args: argparse.Namespace) -> int:

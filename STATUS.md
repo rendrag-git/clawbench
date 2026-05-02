@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:57 UTC
+Last updated: 2026-05-02 01:01 UTC
 
 ## Runtime
 
@@ -136,6 +136,10 @@ The repo needs a full local-provider setup test suite before this is considered 
   - Recorded completed run `live-m2-small-floor-qwen35-fixed-20260502002059` from `oc-stack`.
   - `python3 -m unittest discover -s tests` ran `242` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-fixed-rerun-status-verify --run-id cert-full` produced `40` attempts, `0` failures.
+- M2 gateway lifecycle cleanup fix:
+  - Fixed `run_command` to stop only non-container foreground OpenClaw gateways that the harness itself started; already-running gateways are left alone.
+  - `python3 -m unittest discover -s tests` ran `244` tests.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-gateway-cleanup-fix --run-id cert-full` produced `40` attempts, `0` failures.
 
 ## Latest E2E
 
