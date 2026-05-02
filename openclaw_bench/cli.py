@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .certification import certify_run_dirs, render_certification_text
 from .backend import make_backend
+from .providers import ProviderCandidate, derive_probes_for_profile, run_detection
 from .container import DEFAULT_GATEWAY_PORT, DEFAULT_OPENCLAW_IMAGE, ensure_openclaw_container
 from .manifest import load_model_manifest_scope, load_model_specs, load_suite
 from .models import ModelSpec
@@ -193,6 +194,8 @@ def _add_quickstart_init_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--vllm-max-tokens", type=int, default=256, help="Max output tokens to configure for the vLLM route")
     parser.add_argument("--force", action="store_true", help="Overwrite the generated isolated benchclaw config")
     parser.add_argument("--no-validate", action="store_true", help="Write files without running openclaw config validate")
+    parser.add_argument("--no-detect", action="store_true", help="Skip provider auto-detection; use --vllm-* flags or env vars.")
+    parser.add_argument("--oc-runtime", default=None, help="Override OpenClaw runtime probe target (e.g., ssh:user@host).")
 
 
 def _add_quickstart_lifecycle_args(parser: argparse.ArgumentParser) -> None:
@@ -202,11 +205,36 @@ def _add_quickstart_lifecycle_args(parser: argparse.ArgumentParser) -> None:
 
 def init_command(args: argparse.Namespace) -> int:
     providers = args.providers or prompt_provider_selection()
+    home = Path(args.config_home) if getattr(args, "config_home", None) else None
+
+    detected: ProviderCandidate | None = None
+    if not getattr(args, "no_detect", False) and providers in {"local", "both"}:
+        probe_home = home or Path.home()
+        probes = derive_probes_for_profile(
+            args.openclaw_profile,
+            home=probe_home,
+            oc_runtime_override=getattr(args, "oc_runtime", None),
+        )
+        report = run_detection(
+            providers=["vllm", "ollama", "llamacpp", "lmstudio"],
+            probes=probes,
+            home=probe_home,
+        )
+        for finding in report.findings:
+            print(f"finding: {finding}")
+        if not report.candidates:
+            print(
+                "no local provider detected; pass --no-detect with --vllm-base-url/--vllm-model "
+                "to specify one explicitly, or start a model server first"
+            )
+            return 2
+        detected = next((c for c in report.candidates if c.provider == "vllm"), report.candidates[0])
+
     result = init_quickstart(
         providers=providers,
         project_root=PROJECT_ROOT,
         bench_root=Path(args.bench_root),
-        home=Path(args.config_home) if getattr(args, "config_home", None) else None,
+        home=home,
         profile=args.openclaw_profile,
         agent=args.openclaw_agent,
         port=args.gateway_port,
@@ -216,6 +244,7 @@ def init_command(args: argparse.Namespace) -> int:
         vllm_model=args.vllm_model,
         vllm_context=args.vllm_context,
         vllm_max_tokens=args.vllm_max_tokens,
+        detected_candidate=detected,
     )
     print(f"profile={result.profile}")
     print(f"providers={result.providers}")

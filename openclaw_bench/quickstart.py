@@ -106,9 +106,18 @@ def init_quickstart(
     vllm_model: str | None = None,
     vllm_context: int = DEFAULT_VLLM_CONTEXT,
     vllm_max_tokens: int = DEFAULT_VLLM_MAX_TOKENS,
+    detected_candidate: "ProviderCandidate | None" = None,
 ) -> QuickstartInitResult:
     provider_mode = normalize_provider_selection(providers)
-    vllm = _vllm_endpoint(vllm_base_url, vllm_model, vllm_context, vllm_max_tokens)
+    if detected_candidate is not None and detected_candidate.provider == "vllm" and detected_candidate.models:
+        vllm = VllmEndpoint(
+            base_url=detected_candidate.base_url,
+            model=detected_candidate.models[0],
+            context=vllm_context,
+            max_tokens=vllm_max_tokens,
+        )
+    else:
+        vllm = _vllm_endpoint(vllm_base_url, vllm_model, vllm_context, vllm_max_tokens)
     root = (bench_root or default_bench_root()).expanduser()
     home_root = (home or Path.home()).expanduser()
     selected_port = port or choose_safe_port(DEFAULT_START_PORT)
