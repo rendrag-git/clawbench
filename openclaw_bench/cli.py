@@ -316,12 +316,28 @@ def _init_via_inheritance(
 
     gateway_port = args.gateway_port or choose_safe_port(DEFAULT_START_PORT)
 
+    # Use the source's agents.defaults.model only when it is already a plain
+    # string (and thus safe for clone_profile). Real operator profiles use a
+    # dict form {primary: ..., fallbacks: [...]} pointing at an external provider
+    # (e.g. openai-codex/gpt-5.5) that is not in models.providers — clone_profile
+    # would reject it. Fall back to the detected local provider in that case.
+    source_default = (
+        ((source.get("agents") or {}).get("defaults") or {}).get("model")
+    )
+    if isinstance(source_default, str) and source_default:
+        bench_route_model: str | None = source_default
+    elif detected.models:
+        bench_route_model = f"{detected.provider}/{detected.models[0]}"
+    else:
+        bench_route_model = None
+
     try:
         bench_config = clone_profile(
             source,
             bench_profile=args.openclaw_profile,
             gateway_port=gateway_port,
             bench_agent_id=args.openclaw_agent,
+            bench_route_model=bench_route_model,
             openclaw_version=OPENCLAW_CONFIG_VERSION,
         )
     except ValueError as exc:

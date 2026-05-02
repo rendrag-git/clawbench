@@ -205,6 +205,45 @@ class InitInheritsExistingProfileTests(unittest.TestCase):
             self.assertEqual(routes, ["ollama/qwen3:8b", "vllm/qwen3.5-4b"])
             self.assertEqual(manifest["manifest_scope"]["portability"], "inherited")
 
+    def test_init_inherit_path_uses_detected_route_when_source_default_is_dict(self):
+        """Real operator profiles have agents.defaults.model as a dict
+        {primary: 'openai-codex/...', fallbacks: [...]} pointing at an external
+        provider not in models.providers. The inherit path must fall back to the
+        detected local provider instead of passing the dict to clone_profile."""
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            bench = Path(tmp) / "bench"
+            # Source profile with dict-form agents.defaults.model (external provider)
+            src_path = self._seed_source_profile(home, "pmg")
+            config = json.loads(src_path.read_text())
+            config["agents"]["defaults"]["model"] = {
+                "primary": "openai-codex/gpt-5.5",
+                "fallbacks": ["openai-codex/gpt-5.4"],
+            }
+            src_path.write_text(json.dumps(config), encoding="utf-8")
+
+            exit_code = cli_main([
+                "init",
+                "--providers", "local",
+                "--bench-root", str(bench),
+                "--config-home", str(home),
+                "--openclaw-profile", "bench-pmg",
+                "--gateway-port", "19352",
+                "--no-validate",
+            ])
+            self.assertEqual(exit_code, 0)
+
+            bench_config = json.loads(
+                (home / ".openclaw-bench-pmg" / "openclaw.json").read_text()
+            )
+            # Route must be a local provider, not the external openai-codex route
+            route = bench_config["agents"]["defaults"]["model"]
+            self.assertIsInstance(route, str)
+            self.assertTrue(
+                route.startswith("vllm/") or route.startswith("ollama/"),
+                msg=f"expected a local provider route, got {route!r}",
+            )
+
     def test_init_inherit_path_aborts_when_bench_dir_already_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"

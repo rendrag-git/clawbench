@@ -6,3 +6,9 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+
+# Operator-private notes — host specifics, IPs, API keys, channel IDs, run IDs.
+# Public files in this repo must reference shapes, not specifics.
+LOCAL-NOTES.md
+.local/
+
