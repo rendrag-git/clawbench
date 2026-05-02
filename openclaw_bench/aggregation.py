@@ -2,7 +2,14 @@
 
 Pure functions over `AttemptResult.to_row()` dicts. Used when `--runs-per-task > 1`
 to compute pass^k (all-pass), worst-of-n, mean, pass-rate, and the failure-type
-distribution per (model, KV, context, concurrency, task) cell.
+distribution per (served_model_name, comparison_id, backend, hardware_profile,
+weight_quant, kv_cache_dtype, context_limit, concurrency, task_id) cell.
+
+The cell key matches the 8-dimensional identity that `reporting.summarize` uses
+across the rest of the summary, plus `task_id` so cells are per-task. Aggregating
+on a narrower key (e.g. just `model`) would merge attempts from different
+hardware profiles or backends into one cell, inflating `n` and misclassifying
+stable configs as flaky.
 
 Adopted pattern: openclaw/clawbench upstream (CLAWBENCH_V0_4_SPEC.md §reliability).
 The principle: a model that scores 90 % on one seed and 20 % on the next is not a
@@ -31,11 +38,37 @@ LOAD_FAILURE_TYPES = frozenset(
 )
 
 
+# Cell key dimensions, in order. Mirrors the identity reporting.summarize uses
+# (served_model_name, comparison_id, backend, hardware_profile, weight_quant,
+# kv_cache_dtype, context_limit, concurrency) plus task_id for per-task cells.
+_CELL_KEY_FIELDS = (
+    "served_model_name",
+    "comparison_id",
+    "backend",
+    "hardware_profile",
+    "weight_quant",
+    "kv_cache_dtype",
+    "context_limit",
+    "concurrency",
+    "task_id",
+)
+
+
 @dataclass(frozen=True)
 class CellReliability:
-    """Reliability metrics for one (model, KV, context, concurrency, task) cell."""
+    """Reliability metrics for one runtime+config+task cell.
 
-    model: str
+    The full identity (`served_model_name, comparison_id, backend, hardware_profile,
+    weight_quant, kv_cache_dtype, context_limit, concurrency, task_id`) is carried
+    so cells from different hardware setups serving the same `served_model_name`
+    do not merge.
+    """
+
+    served_model_name: str
+    comparison_id: str
+    backend: str
+    hardware_profile: str
+    weight_quant: str
     kv_cache_dtype: str
     context_limit: int
     concurrency: int
@@ -51,7 +84,11 @@ class CellReliability:
 
     def to_row(self) -> dict:
         return {
-            "model": self.model,
+            "served_model_name": self.served_model_name,
+            "comparison_id": self.comparison_id,
+            "backend": self.backend,
+            "hardware_profile": self.hardware_profile,
+            "weight_quant": self.weight_quant,
             "kv_cache_dtype": self.kv_cache_dtype,
             "context_limit": self.context_limit,
             "concurrency": self.concurrency,
@@ -67,9 +104,15 @@ class CellReliability:
         }
 
 
-def _cell_key(row: dict) -> tuple[str, str, int, int, str]:
+def _cell_key(row: dict) -> tuple:
     return (
-        str(row.get("model", "")),
+        str(row.get("served_model_name", "")),
+        # comparison_id falls back to model id then served_model_name, matching
+        # AttemptResult.to_row's normalization.
+        str(row.get("comparison_id") or row.get("model") or row.get("served_model_name") or ""),
+        str(row.get("backend", "")),
+        str(row.get("hardware_profile", "")),
+        str(row.get("weight_quant", "")),
         str(row.get("kv_cache_dtype", "")),
         int(row.get("context_limit", 0)),
         int(row.get("concurrency", 0)),
@@ -95,9 +138,9 @@ def _classify_cell(statuses: list[str], failure_types: Counter) -> str:
 def aggregate_attempts(rows: list[dict]) -> list[CellReliability]:
     """Group attempt rows into cells and compute reliability metrics per cell.
 
-    Each input row is a dict produced by `AttemptResult.to_row()`. Output is one
-    `CellReliability` per (model, KV, context, concurrency, task) cell with
-    pass^k, worst-of-n, mean, pass-rate. Cells with zero rows are not emitted.
+    Each input row is a dict produced by `AttemptResult.to_row()`. Cells are keyed
+    on the full runtime+config identity (see `_CELL_KEY_FIELDS`) plus `task_id`.
+    Output is one `CellReliability` per cell.
     """
     if not rows:
         return []
@@ -108,7 +151,17 @@ def aggregate_attempts(rows: list[dict]) -> list[CellReliability]:
 
     out: list[CellReliability] = []
     for key, cell_rows in sorted(cells.items()):
-        model, kv, context, concurrency, task_id = key
+        (
+            served_model_name,
+            comparison_id,
+            backend,
+            hardware_profile,
+            weight_quant,
+            kv_cache_dtype,
+            context_limit,
+            concurrency,
+            task_id,
+        ) = key
         scores = [float(r.get("score", 0.0) or 0.0) for r in cell_rows]
         statuses = [str(r.get("status", "fail")) for r in cell_rows]
         failure_types = Counter(
@@ -119,9 +172,13 @@ def aggregate_attempts(rows: list[dict]) -> list[CellReliability]:
         n = len(cell_rows)
         pass_count = statuses.count("pass")
         cell = CellReliability(
-            model=model,
-            kv_cache_dtype=kv,
-            context_limit=context,
+            served_model_name=served_model_name,
+            comparison_id=comparison_id,
+            backend=backend,
+            hardware_profile=hardware_profile,
+            weight_quant=weight_quant,
+            kv_cache_dtype=kv_cache_dtype,
+            context_limit=context_limit,
             concurrency=concurrency,
             task_id=task_id,
             n=n,
@@ -138,21 +195,36 @@ def aggregate_attempts(rows: list[dict]) -> list[CellReliability]:
 
 
 def summarize_reliability(cells: list[CellReliability]) -> dict:
-    """Roll cell metrics up to a (model, kv) level summary for the decision table.
+    """Roll cell metrics up to a (served_model_name, comparison_id, backend,
+    hardware_profile, weight_quant, kv_cache_dtype) level summary for the
+    decision table.
 
-    Returns: {(model, kv_cache_dtype): {n_cells, n_all_pass, n_all_fail, n_flaky,
-                                        n_load_failed, mean_pass_k, mean_worst_of_n,
-                                        mean_pass_rate}}
+    The rollup key matches the 6-dimensional identity that `reporting.summarize`
+    uses for its main per-row groupings (the runtime+config identity, without
+    context, concurrency, or task). Hardware-distinct configs serving the same
+    `served_model_name` stay separate rows.
+
+    Returns: {(served_model_name, comparison_id, backend, hardware_profile,
+              weight_quant, kv_cache_dtype): {n_cells, n_all_pass, n_all_fail,
+              n_flaky, n_load_failed, mean_pass_k, mean_worst_of_n, mean_pass_rate}}
     """
     if not cells:
         return {}
-    by_model: dict[tuple[str, str], list[CellReliability]] = {}
+    by_model: dict[tuple, list[CellReliability]] = {}
     for cell in cells:
-        by_model.setdefault((cell.model, cell.kv_cache_dtype), []).append(cell)
+        rollup_key = (
+            cell.served_model_name,
+            cell.comparison_id,
+            cell.backend,
+            cell.hardware_profile,
+            cell.weight_quant,
+            cell.kv_cache_dtype,
+        )
+        by_model.setdefault(rollup_key, []).append(cell)
     summary: dict = {}
-    for (model, kv), group in sorted(by_model.items()):
+    for rollup_key, group in sorted(by_model.items()):
         n = len(group)
-        summary[(model, kv)] = {
+        summary[rollup_key] = {
             "n_cells": n,
             "n_all_pass": sum(1 for c in group if c.cell_status == "all_pass"),
             "n_all_fail": sum(1 for c in group if c.cell_status == "all_fail"),
