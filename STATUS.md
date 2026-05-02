@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:10 UTC
+Last updated: 2026-05-02 00:13 UTC
 
 ## Runtime
 
@@ -194,7 +194,8 @@ Latest result directory:
 
 Result summary:
 
-- Pending. The active rerun has written `config.json` and raw output for `small-workspace-discovery`, but no `attempts.jsonl` or `summary.json` yet as of `2026-05-02 00:10 UTC`.
+- Pending. The active rerun has written `config.json` and raw output for `small-workspace-discovery`, but no second raw artifact, `attempts.jsonl`, or `summary.json` yet as of `2026-05-02 00:13 UTC`.
+- Process status at `2026-05-02 00:13 UTC`: benchmark Python PID `121010` is still running, with an `openclaw-agent` child for `small-patch-execution`; gateway diagnostics report a long-running processing session, but new stream events were still appearing.
 - This run is expected to produce only the `tier-small` tasks whose `context_sizes` are empty or include `32768`.
 - A complete small-floor calibration record still needs a 4096-context pass over the 4k needle task or a model manifest that includes both required small-tier contexts.
 - Previous M1 live anchor record: run id `live-m1-qwen35-rerun-20260501225000`, code commit `a9fd98b`, model `qwen3.5-4b`, KV mode `provider_default`, context `32768`, concurrency `1`, date `2026-05-01`.
