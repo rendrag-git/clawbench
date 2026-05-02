@@ -46,6 +46,7 @@ class RunConfig:
     thinking: str | None = None
     timeout_s: int = 300
     openclaw_smoke_timeout_s: int = 60
+    runs_per_task: int = 1
 
 
 class BenchmarkRunner:
@@ -92,6 +93,7 @@ class BenchmarkRunner:
                     "thinking": config.thinking,
                     "timeout_s": config.timeout_s,
                     "openclaw_smoke_timeout_s": config.openclaw_smoke_timeout_s,
+                    "runs_per_task": config.runs_per_task,
                     "provenance": _run_provenance(config),
                     "runtime": _runtime_provenance(config),
                 },
@@ -223,19 +225,21 @@ class BenchmarkRunner:
         raw_dir: Path,
         patch_dir: Path,
     ) -> list[AttemptResult]:
+        runs_per_task = max(1, int(config.runs_per_task))
         attempts = []
-        for worker_index in range(concurrency):
-            for task in config.suite.tasks:
-                if task.context_sizes and model.context_limit not in task.context_sizes:
-                    continue
-                attempts.append((worker_index, task))
+        for run_index in range(runs_per_task):
+            for worker_index in range(concurrency):
+                for task in config.suite.tasks:
+                    if task.context_sizes and model.context_limit not in task.context_sizes:
+                        continue
+                    attempts.append((worker_index, task, run_index))
 
         results: list[AttemptResult] = []
         with GpuTelemetrySampler() as telemetry:
             with ThreadPoolExecutor(max_workers=concurrency) as pool:
                 futures = [
-                    pool.submit(self._run_attempt, config, model, concurrency, worker_index, task, raw_dir, patch_dir)
-                    for worker_index, task in attempts
+                    pool.submit(self._run_attempt, config, model, concurrency, worker_index, task, raw_dir, patch_dir, run_index)
+                    for worker_index, task, run_index in attempts
                 ]
                 for future in as_completed(futures):
                     results.append(future.result())
@@ -253,8 +257,9 @@ class BenchmarkRunner:
         task: TaskSpec,
         raw_dir: Path,
         patch_dir: Path,
+        run_index: int = 0,
     ) -> AttemptResult:
-        workspace_id = _workspace_id(model, concurrency, worker_index, task)
+        workspace_id = _workspace_id(model, concurrency, worker_index, task, run_index)
         workspace = config.workspace_root / workspace_id
         fixture = config.fixtures_root / task.fixture
         copy_fixture(fixture, workspace)
@@ -342,6 +347,7 @@ class BenchmarkRunner:
             request_errors=response.request_errors,
             failure_type=failure_type,
             notes=notes or verify_output[-500:],
+            run_index=run_index,
         )
 
     def _write_patch(self, path: Path, before: dict[str, str], after: dict[str, str]) -> None:
@@ -365,11 +371,13 @@ def _safe_id(value: str) -> str:
     return "".join(char if char.isalnum() or char in {"-", "_"} else "-" for char in value)
 
 
-def _workspace_id(model: ModelSpec, concurrency: int, worker_index: int, task: TaskSpec) -> str:
-    return (
+def _workspace_id(model: ModelSpec, concurrency: int, worker_index: int, task: TaskSpec, run_index: int = 0) -> str:
+    base = (
         f"{_safe_id(model.served_model_name)}-{_safe_id(model.hardware_profile)}-{_safe_id(model.kv_cache_dtype)}-"
         f"ctx{model.context_limit}-conc{concurrency}-worker-{worker_index:03d}-{task.task_id}"
     )
+    # Backward-compat: only append run-N suffix when run_index > 0 so single-seed runs keep their existing workspace ids.
+    return base if run_index == 0 else f"{base}-r{run_index:03d}"
 
 
 def _session_id(run_id: str, workspace_id: str, worker_index: int, task: TaskSpec) -> str:

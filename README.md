@@ -56,3 +56,14 @@ docs/                  Design + operations documentation (this README is the ind
 - The simulator backend (`--backend simulator`) covers harness mechanics without live tokens. Run it before sending changes that touch scoring, workspace isolation, or report generation.
 - Tests live under `tests/`. Live tests are skipped unless `OC_BENCH_LIVE=1`.
 - `GOAL.md` is the source of truth for capabilities and acceptance. Update it before opening work that closes a gap.
+
+## Acknowledgments
+
+This project was developed independently. Goal, design, tier suite, scoring rules, provider-detection surface, and OpenClaw routing-config generation predate any awareness of similar work — they were built from the local-runtime decision problem ("which model should I run for OC agent work on my hardware") that motivated this repo.
+
+After the M3 deployment-surface slice landed, **[openclaw/clawbench](https://github.com/openclaw/clawbench)** (MIT) — the OpenClaw org's own agent benchmark — was discovered. That repo has different goals (broad agent evaluation, signal-curated tasks, trace-based scoring with judge advisory, dynamical-systems diagnostics) and a longer history. After reviewing it, a small set of methodology patterns were identified as worth adopting because they strengthen the floor/ceiling discrimination this repo's tier suite is built around:
+
+- **Multi-seed reliability metrics** (`pass^k`, worst-of-n, pass-rate, `cell_status`) — `openclaw_bench/aggregation.py`. Adopted after the upstream audit decomposed 40-task variance and reported that 47 % was seed noise. See `CLAWBENCH_V0_4_SPEC.md` in that repo for their original spec.
+- *(Planned)* Bootstrap CIs and Taguchi S/N for decision-table reporting; per-task SNR variance decomposition for tier-suite audits. Both also derive from the upstream methodology.
+
+Methodology this repo deliberately does **not** adopt and why is in [GOAL.md](GOAL.md) Build Principles — chiefly the LLM judge sidecar (this phase is machine-checkable scoring only) and the dynamical-systems diagnostics suite (out of scope for "is this local model usable for OC agent work"). The two repos answer different questions and remain distinct.

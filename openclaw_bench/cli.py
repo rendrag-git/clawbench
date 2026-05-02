@@ -174,6 +174,12 @@ def _add_common_run_args(parser: argparse.ArgumentParser) -> None:
         help="Disable configured benchmark agents; only valid for local OpenClaw runs",
     )
     parser.add_argument("--thinking")
+    parser.add_argument(
+        "--runs-per-task",
+        type=int,
+        default=1,
+        help="How many times each task runs per (model, KV, context, concurrency) cell. >1 enables pass^k / worst-of-n / pass-rate reliability metrics in the summary. Default 1 (backward-compatible).",
+    )
 
 
 def _add_quickstart_init_args(parser: argparse.ArgumentParser) -> None:
@@ -431,6 +437,7 @@ def run_command(args: argparse.Namespace) -> int:
         thinking=args.thinking,
         timeout_s=args.timeout,
         openclaw_smoke_timeout_s=args.openclaw_smoke_timeout,
+        runs_per_task=getattr(args, "runs_per_task", 1),
     )
     backend = make_backend(
         args.backend,
