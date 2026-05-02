@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:13 UTC
+Last updated: 2026-05-02 00:20 UTC
 
 ## Runtime
 
@@ -135,7 +135,7 @@ The repo needs a full local-provider setup test suite before this is considered 
 
 ## Latest E2E
 
-M2 small-floor live rerun in progress:
+M2 small-floor live rerun completed:
 
 - Purpose: rerun the small-tier floor candidate for `qwen3.5-4b` after the hallucinated-path scorer fix.
 - Run id: `live-m2-small-floor-qwen35-rerun-20260502000224`
@@ -151,7 +151,7 @@ M2 small-floor live rerun in progress:
 - Staged repo: `/tmp/openclaw-local-model-bench-m2-calib-20260502000224`
 - Result directory: `/tmp/oc-bench-root-m2-calib-20260502000224/results/live-m2-small-floor-qwen35-rerun-20260502000224`
 - Log: `/tmp/live-m2-small-floor-qwen35-rerun-20260502000224.log`
-- Process: parent shell PID `121009`, benchmark Python PID `121010`
+- Process: completed; former parent shell PID `121009`, benchmark Python PID `121010`
 - Preflight: pass.
 - Coverage note: the generated model manifest has `contexts: [32768]`, so runner task filtering skips `small-workspace-needle-4k` (`context_sizes: [4096]`). This rerun can diagnose the 32k-compatible strict-JSON and patch tasks, but it cannot by itself become a complete `tier-small` calibration record.
 - First-attempt diagnosis: `small-workspace-discovery` produced valid relative paths with `./` prefixes; the pre-fix scorer marks them as mismatches. This run is now diagnostic only and should be rerun after the discovery path-equivalence scorer fix lands.
@@ -194,8 +194,14 @@ Latest result directory:
 
 Result summary:
 
-- Pending. The active rerun has written `config.json` and raw output for `small-workspace-discovery`, but no second raw artifact, `attempts.jsonl`, or `summary.json` yet as of `2026-05-02 00:13 UTC`.
-- Process status at `2026-05-02 00:13 UTC`: benchmark Python PID `121010` is still running, with an `openclaw-agent` child for `small-patch-execution`; gateway diagnostics report a long-running processing session, but new stream events were still appearing.
+- Diagnostic run complete under pre-fix commit `936395b`.
+- Attempts: `2`
+- Failures: `2`
+- Pass rate: `0.0%`
+- Failure types:
+  - `small-workspace-discovery`: `wrong_file`; returned `./api/routes.py` and `./db/schema.py`, which are real equivalent paths but failed under the old scorer.
+  - `small-patch-execution`: `openclaw_timeout`; the agent streamed for about `625s` and produced no patch artifact.
+- Calibration status: not a durable small-floor record. It used the pre-fix discovery scorer and skipped `small-workspace-needle-4k`.
 - This run is expected to produce only the `tier-small` tasks whose `context_sizes` are empty or include `32768`.
 - A complete small-floor calibration record still needs a 4096-context pass over the 4k needle task or a model manifest that includes both required small-tier contexts.
 - Previous M1 live anchor record: run id `live-m1-qwen35-rerun-20260501225000`, code commit `a9fd98b`, model `qwen3.5-4b`, KV mode `provider_default`, context `32768`, concurrency `1`, date `2026-05-01`.
@@ -291,7 +297,7 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 ## Open Items
 
 - Task-gap coverage is now present across the M2 tier manifests. Next M2 blocker: live floor/ceiling calibration records for every tier.
-- Poll `live-m2-small-floor-qwen35-rerun-20260502000224`; if it completes, record score/pass rate and decide whether it supports the small-floor calibration threshold.
+- Stage current HEAD into `oc-stack` and rerun the 32k-compatible small live slice with the discovery path-equivalence scorer fix.
 - Do not treat the active 32k-only small rerun as complete `tier-small` coverage; it skips `small-workspace-needle-4k`. After it completes, run the missing 4096-context needle coverage before creating a durable small-floor calibration record.
 - Commit the discovery path-equivalence scorer fix, then stage and rerun the small live slice again; the current active rerun uses the older scorer and is diagnostic only.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
