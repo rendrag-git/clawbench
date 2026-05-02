@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:23 UTC
+Last updated: 2026-05-02 00:37 UTC
 
 ## Runtime
 
@@ -154,6 +154,7 @@ M2 small-floor fixed-scorer live rerun in progress:
 - Process: parent shell PID `124070`, benchmark Python PID `124071`
 - Preflight: pass.
 - Coverage note: this still uses the generated model manifest with `contexts: [32768]`, so it skips `small-workspace-needle-4k`. It can validate the fixed scorer on the 32k-compatible discovery/patch slice only.
+- First-attempt result: `small-workspace-discovery` timed out after the 600s OpenClaw agent timeout with empty text, so this run did not exercise the discovery path-equivalence scorer on that task. The benchmark is still running the next 32k-compatible task.
 
 Previous M2 small-floor live rerun completed:
 
@@ -214,7 +215,7 @@ Latest result directory:
 
 Result summary:
 
-- Pending. The fixed-scorer rerun has written `config.json` but no attempts yet as of `2026-05-02 00:23 UTC`.
+- Pending. The fixed-scorer rerun has written `config.json` and raw output for `small-workspace-discovery`; no `attempts.jsonl` or `summary.json` yet as of `2026-05-02 00:36 UTC`.
 - Previous diagnostic result:
 - Diagnostic run complete under pre-fix commit `936395b`.
 - Attempts: `2`
