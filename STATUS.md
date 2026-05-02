@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:07 UTC
+Last updated: 2026-05-02 00:10 UTC
 
 ## Runtime
 
@@ -127,6 +127,11 @@ The repo needs a full local-provider setup test suite before this is considered 
   - Fixed by counting slash references as file references only when the candidate has a file suffix; bare prose slash pairs are ignored.
   - `python3 -m unittest discover -s tests` ran `241` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-hallucinated-path-fix --run-id cert-full` produced `40` attempts, `0` failures.
+- M2 discovery path-equivalence scorer diagnosis:
+  - Live run `live-m2-small-floor-qwen35-rerun-20260502000224` returned `./api/routes.py` and `./db/schema.py`; those are real workspace files but the scorer required exact canonical strings.
+  - Fixed by resolving returned discovery paths and expected paths inside the workspace before comparing them.
+  - `python3 -m unittest discover -s tests` ran `242` tests.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-discovery-path-equivalence --run-id cert-full` produced `40` attempts, `0` failures.
 
 ## Latest E2E
 
@@ -149,6 +154,7 @@ M2 small-floor live rerun in progress:
 - Process: parent shell PID `121009`, benchmark Python PID `121010`
 - Preflight: pass.
 - Coverage note: the generated model manifest has `contexts: [32768]`, so runner task filtering skips `small-workspace-needle-4k` (`context_sizes: [4096]`). This rerun can diagnose the 32k-compatible strict-JSON and patch tasks, but it cannot by itself become a complete `tier-small` calibration record.
+- First-attempt diagnosis: `small-workspace-discovery` produced valid relative paths with `./` prefixes; the pre-fix scorer marks them as mismatches. This run is now diagnostic only and should be rerun after the discovery path-equivalence scorer fix lands.
 
 Previous M2 live calibration candidate completed:
 
@@ -188,7 +194,7 @@ Latest result directory:
 
 Result summary:
 
-- Pending. The active rerun has written `config.json` and the first workspace, but no `attempts.jsonl` or `summary.json` yet as of `2026-05-02 00:06 UTC`.
+- Pending. The active rerun has written `config.json` and raw output for `small-workspace-discovery`, but no `attempts.jsonl` or `summary.json` yet as of `2026-05-02 00:10 UTC`.
 - This run is expected to produce only the `tier-small` tasks whose `context_sizes` are empty or include `32768`.
 - A complete small-floor calibration record still needs a 4096-context pass over the 4k needle task or a model manifest that includes both required small-tier contexts.
 - Previous M1 live anchor record: run id `live-m1-qwen35-rerun-20260501225000`, code commit `a9fd98b`, model `qwen3.5-4b`, KV mode `provider_default`, context `32768`, concurrency `1`, date `2026-05-01`.
@@ -286,4 +292,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 - Task-gap coverage is now present across the M2 tier manifests. Next M2 blocker: live floor/ceiling calibration records for every tier.
 - Poll `live-m2-small-floor-qwen35-rerun-20260502000224`; if it completes, record score/pass rate and decide whether it supports the small-floor calibration threshold.
 - Do not treat the active 32k-only small rerun as complete `tier-small` coverage; it skips `small-workspace-needle-4k`. After it completes, run the missing 4096-context needle coverage before creating a durable small-floor calibration record.
+- Commit the discovery path-equivalence scorer fix, then stage and rerun the small live slice again; the current active rerun uses the older scorer and is diagnostic only.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.

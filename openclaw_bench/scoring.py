@@ -135,10 +135,23 @@ def _score_discovery(task: TaskSpec, workspace: Path, response: BackendResponse)
     # Catches stale or non-command test answers without requiring one canonical shell string.
     checks.append(_test_command_runnable(workspace, output.get("test_command")))
     for key in ("routes_file", "schema_file"):
-        checks.append((output.get(key) == expected.get(key), f"{key} did not match expected value"))
+        checks.append((_workspace_path_matches(workspace, output.get(key), expected.get(key)), f"{key} did not match expected value"))
     checks.append((path_exists(workspace, str(output.get("routes_file", ""))), "routes_file does not exist"))
     checks.append((path_exists(workspace, str(output.get("schema_file", ""))), "schema_file does not exist"))
     return checks
+
+
+def _workspace_path_matches(workspace: Path, actual: Any, expected: Any) -> bool:
+    if not isinstance(actual, str) or not isinstance(expected, str):
+        return False
+    try:
+        actual_path = (workspace / actual).resolve()
+        expected_path = (workspace / expected).resolve()
+        actual_path.relative_to(workspace.resolve())
+        expected_path.relative_to(workspace.resolve())
+    except ValueError:
+        return False
+    return actual_path == expected_path and actual_path.exists()
 
 
 def _test_command_runnable(workspace: Path, command_text: Any) -> tuple[bool, str]:

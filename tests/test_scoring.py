@@ -121,6 +121,23 @@ class ScoringTests(unittest.TestCase):
             self.assertIsNone(failure)
             self.assertEqual(hallucinated, 0)
 
+    def test_discovery_accepts_equivalent_relative_file_paths(self):
+        suite = load_suite(ROOT / "manifests" / "openclaw-agent-core.json")
+        task = next(item for item in suite.tasks if item.task_id == "workspace-discovery")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            payload = {
+                "test_command": "python3 tests/test_api.py",
+                "routes_file": "./api/routes.py",
+                "schema_file": "./db/schema.py",
+            }
+            response = BackendResponse(text="", json_output=payload, raw={})
+            score, failure, hallucinated, notes = score_task(task, workspace, response, [], True)
+            self.assertEqual(score, 1.0, notes)
+            self.assertIsNone(failure)
+            self.assertEqual(hallucinated, 0)
+
     def test_discovery_accepts_unittest_module_command(self):
         suite = load_suite(ROOT / "manifests" / "openclaw-agent-core.json")
         task = next(item for item in suite.tasks if item.task_id == "workspace-discovery")
