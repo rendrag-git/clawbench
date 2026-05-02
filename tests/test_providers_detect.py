@@ -211,3 +211,48 @@ class RunDetectionTests(unittest.TestCase):
             any(f.startswith("reachable_from_host_not_runtime") for f in report.findings),
             msg=f"findings={report.findings}",
         )
+
+
+from openclaw_bench.providers.detect import derive_probes_for_profile
+from openclaw_bench.providers.probes import IncusExecProbe, LocalProbe
+
+
+class DeriveProbesForProfileTests(unittest.TestCase):
+    def test_returns_local_probe_only_for_native_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            profile_dir = home / ".openclaw-bench"
+            profile_dir.mkdir()
+            (profile_dir / "openclaw.json").write_text(json.dumps({"gateway": {"mode": "local"}}))
+            probes = derive_probes_for_profile("bench", home=home)
+        self.assertEqual(len(probes), 1)
+        self.assertIsInstance(probes[0], LocalProbe)
+
+    def test_returns_local_plus_incus_when_runtime_field_names_incus(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            profile_dir = home / ".openclaw-bench"
+            profile_dir.mkdir()
+            (profile_dir / "openclaw.json").write_text(
+                json.dumps({"gateway": {"runtime": {"kind": "incus", "instance": "oc-stack"}}})
+            )
+            probes = derive_probes_for_profile("bench", home=home)
+        self.assertEqual(len(probes), 2)
+        self.assertIsInstance(probes[0], LocalProbe)
+        self.assertIsInstance(probes[1], IncusExecProbe)
+        self.assertEqual(probes[1].instance, "oc-stack")
+
+    def test_explicit_oc_runtime_overrides_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            probes = derive_probes_for_profile(
+                "bench", home=home, oc_runtime_override="incus:oc-stack"
+            )
+        self.assertEqual(len(probes), 2)
+        self.assertIsInstance(probes[1], IncusExecProbe)
+        self.assertEqual(probes[1].instance, "oc-stack")
+
+    def test_unknown_override_kind_raises_clear_error(self):
+        with self.assertRaises(ValueError) as cm:
+            derive_probes_for_profile("bench", home=Path("/tmp"), oc_runtime_override="weird")
+        self.assertIn("--oc-runtime", str(cm.exception))

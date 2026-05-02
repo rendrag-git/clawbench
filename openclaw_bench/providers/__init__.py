@@ -1,6 +1,7 @@
 from .detect import (
     DetectionReport,
     ProviderCandidate,
+    derive_probes_for_profile,
     port_probe_provider,
     run_detection,
     scan_existing_oc_profiles,
@@ -23,6 +24,7 @@ __all__ = [
     "ProbeResult",
     "ProviderCandidate",
     "SSHProbe",
+    "derive_probes_for_profile",
     "port_probe_provider",
     "run_detection",
     "scan_existing_oc_profiles",

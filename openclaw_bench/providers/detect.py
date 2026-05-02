@@ -135,6 +135,57 @@ def run_detection(
     return DetectionReport(candidates=tuple(candidates), findings=tuple(findings))
 
 
+from .probes import DockerExecProbe, IncusExecProbe, LocalProbe, Probe, SSHProbe
+
+
+def derive_probes_for_profile(
+    profile: str,
+    *,
+    home: Path,
+    oc_runtime_override: str | None = None,
+) -> list[Probe]:
+    probes: list[Probe] = [LocalProbe()]
+    if oc_runtime_override:
+        probes.append(_probe_from_override(oc_runtime_override))
+        return probes
+    config_path = Path(home).expanduser() / f".openclaw-{profile}" / "openclaw.json"
+    if config_path.is_file():
+        try:
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        runtime = (((payload or {}).get("gateway") or {}).get("runtime") or {})
+        kind = runtime.get("kind") if isinstance(runtime, dict) else None
+        if kind == "incus":
+            instance = runtime.get("instance")
+            if isinstance(instance, str):
+                probes.append(IncusExecProbe(instance))
+        elif kind == "docker":
+            container = runtime.get("container")
+            if isinstance(container, str):
+                probes.append(DockerExecProbe(container))
+    return probes
+
+
+def _probe_from_override(spec: str) -> Probe:
+    if ":" not in spec:
+        raise ValueError(
+            f"--oc-runtime expects 'kind:target' (incus:<instance>, docker:<container>, ssh:<user@host>); got '{spec}'"
+        )
+    kind, _, target = spec.partition(":")
+    kind = kind.strip().lower()
+    target = target.strip()
+    if kind == "incus":
+        return IncusExecProbe(target)
+    if kind == "docker":
+        return DockerExecProbe(target)
+    if kind == "ssh":
+        return SSHProbe(target)
+    raise ValueError(
+        f"--oc-runtime kind '{kind}' not supported; use incus|docker|ssh"
+    )
+
+
 def scan_existing_oc_profiles(home: Path) -> list[ProviderCandidate]:
     home = Path(home).expanduser()
     candidates: list[ProviderCandidate] = []
