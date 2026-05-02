@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 01:25 UTC
+Last updated: 2026-05-02 01:36 UTC
 
 ## Runtime
 
@@ -15,8 +15,18 @@ Last updated: 2026-05-02 01:25 UTC
 - Model checkpoint size reported by vLLM: `8.68 GiB`
 - GPU model load reported by vLLM: `7.99 GiB`
 - Context target: `32768`
+- Larger-model candidate target: RTX PRO 5000 Blackwell on GPU 1, preferably as a second benchmark vLLM service on a separate port rather than replacing the 4B baseline.
+- Larger-model serve-context rule: do not start agent benchmark models with `--max-model-len 4096`; use `32768` when feasible and `16384` only as the fallback minimum.
+- GPT-OSS 20B no-artificial-cap attempt:
+  - Unloaded the GPU 1 embedding vLLM process.
+  - `shanjiaz/gpt-oss-20b-nvfp4-modelopt` on GPU 1 / port `8000` without `--max-model-len` selected `max_seq_len=131072`, but startup failed twice before listening. Root cause: FlashInfer FP4 GEMM for Blackwell SM120 failed with `No supported CUDA architectures found for major versions [12]`. Per two-attempt rule, do not retry this launch shape without changing the kernel/checkpoint/runtime path.
+  - Switched checkpoint/quantization path to `openai/gpt-oss-20b` MXFP4, still without `--max-model-len`.
+  - Successful runtime: PID `2140735`, endpoint `http://10.68.198.1:8000/v1`, served model `gpt-oss-20b`, route auth `VLLM_API_KEY=vllm-local`, vLLM `max_model_len=131072`, `quantization=gpt_oss_mxfp4`, `kv_cache_dtype=fp8`.
+  - Direct health passed: `/v1/models` reports `gpt-oss-20b` with `max_model_len=131072`.
+  - Direct chat smoke passed with `max_tokens=128`: prompt `Reply with exactly: ok` returned visible content `ok`.
+  - Short story smoke passed only after setting `reasoning_effort="low"`; without it, GPT-OSS spent the token budget on reasoning and returned empty/truncated visible content.
 
-The service runs on GPU 0, the 16GB A4000, and leaves GPU 1 alone. It uses `--enforce-eager`; without eager mode, vLLM OOMed during CUDA graph / KV-cache profiling at 32k context.
+The Qwen3.5 4B service runs on GPU 0, the 16GB A4000. It uses `--enforce-eager`; without eager mode, vLLM OOMed during CUDA graph / KV-cache profiling at 32k context. GPU 1 now runs the GPT-OSS 20B MXFP4 test server on port `8000`; the previous GPU 1 embedding vLLM process was unloaded for this test.
 
 ## Product Goal
 
