@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 01:52 UTC
+Last updated: 2026-05-02 01:59 UTC
 
 ## Runtime
 
@@ -25,14 +25,16 @@ Last updated: 2026-05-02 01:52 UTC
   - Direct health passed: `/v1/models` reports `gpt-oss-20b` with `max_model_len=131072`.
   - Direct chat smoke passed with `max_tokens=128`: prompt `Reply with exactly: ok` returned visible content `ok`.
   - Short story smoke passed only after setting `reasoning_effort="low"`; without it, GPT-OSS spent the token budget on reasoning and returned empty/truncated visible content.
-  - OpenClaw route smoke through isolated profile `benchclaw-m2-gptoss` timed out twice. This is likely request-shaping/config, not model-runtime failure: direct vLLM works with `reasoning_effort="low"`, but after setting `agents.defaults.models["vllm/gpt-oss-20b"].params` to include `extra_body.reasoning_effort="low"`, the gateway log still showed only `{"maxTokens":512}` in the stream wrapper params and the route timed out. Do not try a third blind route attempt; inspect the OpenClaw vLLM/OpenAI-compatible provider parameter mapping first.
-  - Cleanup: stopped/disabled the isolated `benchclaw-m2-gptoss` gateway and killed lingering gateway PID `131977`; ports `19308` and `19310` are clear.
+  - OpenClaw route smoke through isolated profile `benchclaw-m2-gptoss` timed out twice against the real GPT-OSS vLLM endpoint after setting `agents.defaults.models["vllm/gpt-oss-20b"].params.extra_body.reasoning_effort="low"`.
+  - Follow-up diagnostic: pointed only the isolated `benchclaw-m2-gptoss` profile at a temporary fake OpenAI-compatible endpoint on `127.0.0.1:19400` and captured the outbound request. OpenClaw sent `{"max_completion_tokens":512,"reasoning_effort":"low"}` in the chat-completions payload, so the documented `extra_body` config path works. The earlier gateway debug line showing only `{"maxTokens":512}` was not evidence that `extra_body` was ignored; that log only reports stream wrapper params.
+  - Current diagnosis: the remaining timeout is downstream of request shaping, likely GPT-OSS/vLLM latency or streaming behavior under OpenClaw's route timeout envelope. Next diagnostic should replay the exact captured OpenClaw payload directly against vLLM and compare timing before changing benchmark code or config.
+  - Cleanup: stopped/disabled isolated `benchclaw-m2-gptoss` gateway processes and killed temporary proxy PID `132761`; ports `19308`, `19310`, and `19400` are clear. Restored `benchclaw-m2-gptoss` vLLM base URL to `http://10.68.198.1:8000/v1`.
 
 The Qwen3.5 4B service runs on GPU 0, the 16GB A4000. It uses `--enforce-eager`; without eager mode, vLLM OOMed during CUDA graph / KV-cache profiling at 32k context. GPU 1 now runs the GPT-OSS 20B MXFP4 test server on port `8000`; the previous GPU 1 embedding vLLM process was unloaded for this test.
 
 ## Current Blocker
 
-M2 larger-model calibration is blocked on OpenClaw request shaping for GPT-OSS 20B. The model server itself is healthy at 131k context and can return visible answers when direct API requests pass `reasoning_effort="low"`. The isolated OpenClaw route path still times out, and the observed gateway log suggests the configured `extra_body` parameter is not reaching the provider request in the expected form.
+M2 larger-model calibration is blocked on GPT-OSS 20B timing/streaming under the OpenClaw route path. The model server itself is healthy at 131k context and can return visible answers when direct API requests pass `reasoning_effort="low"`. A proxy capture proved OpenClaw forwards `reasoning_effort="low"` from `params.extra_body`, so the next check is whether the exact OpenClaw-shaped chat-completions payload returns from vLLM inside the gateway timeout budget.
 
 ## Product Goal
 
