@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:20 UTC
+Last updated: 2026-05-02 00:23 UTC
 
 ## Runtime
 
@@ -135,7 +135,27 @@ The repo needs a full local-provider setup test suite before this is considered 
 
 ## Latest E2E
 
-M2 small-floor live rerun completed:
+M2 small-floor fixed-scorer live rerun in progress:
+
+- Purpose: rerun the 32k-compatible small-tier floor slice for `qwen3.5-4b` after the discovery path-equivalence scorer fix.
+- Run id: `live-m2-small-floor-qwen35-fixed-20260502002059`
+- Code commit: `326024c`
+- Runtime: `oc-stack`, OpenClaw `2026.4.27`
+- Suite: `manifests/tier-small.json`
+- Model config: `/tmp/oc-bench-root-m2-calib-20260502002059/manifests/starter-models.json`
+- Model: `qwen3.5-4b`
+- KV mode: `provider_default`
+- Context: `32768`
+- Concurrency: `1`
+- Isolated profile: `benchclaw-m2-calib-20260502002059`
+- Staged repo: `/tmp/openclaw-local-model-bench-m2-calib-20260502002059`
+- Result directory: `/tmp/oc-bench-root-m2-calib-20260502002059/results/live-m2-small-floor-qwen35-fixed-20260502002059`
+- Log: `/tmp/live-m2-small-floor-qwen35-fixed-20260502002059.log`
+- Process: parent shell PID `124070`, benchmark Python PID `124071`
+- Preflight: pass.
+- Coverage note: this still uses the generated model manifest with `contexts: [32768]`, so it skips `small-workspace-needle-4k`. It can validate the fixed scorer on the 32k-compatible discovery/patch slice only.
+
+Previous M2 small-floor live rerun completed:
 
 - Purpose: rerun the small-tier floor candidate for `qwen3.5-4b` after the hallucinated-path scorer fix.
 - Run id: `live-m2-small-floor-qwen35-rerun-20260502000224`
@@ -183,17 +203,19 @@ Previous M2 live calibration candidate completed:
 Latest staged repo:
 
 ```text
-/tmp/openclaw-local-model-bench-m2-calib-20260502000224
+/tmp/openclaw-local-model-bench-m2-calib-20260502002059
 ```
 
 Latest result directory:
 
 ```text
-/tmp/oc-bench-root-m2-calib-20260502000224/results/live-m2-small-floor-qwen35-rerun-20260502000224
+/tmp/oc-bench-root-m2-calib-20260502002059/results/live-m2-small-floor-qwen35-fixed-20260502002059
 ```
 
 Result summary:
 
+- Pending. The fixed-scorer rerun has written `config.json` but no attempts yet as of `2026-05-02 00:23 UTC`.
+- Previous diagnostic result:
 - Diagnostic run complete under pre-fix commit `936395b`.
 - Attempts: `2`
 - Failures: `2`
@@ -297,7 +319,6 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 ## Open Items
 
 - Task-gap coverage is now present across the M2 tier manifests. Next M2 blocker: live floor/ceiling calibration records for every tier.
-- Stage current HEAD into `oc-stack` and rerun the 32k-compatible small live slice with the discovery path-equivalence scorer fix.
+- Poll `live-m2-small-floor-qwen35-fixed-20260502002059`; if complete, record score/pass rate and whether the discovery path-equivalence scorer fix changed the result as expected.
 - Do not treat the active 32k-only small rerun as complete `tier-small` coverage; it skips `small-workspace-needle-4k`. After it completes, run the missing 4096-context needle coverage before creating a durable small-floor calibration record.
-- Commit the discovery path-equivalence scorer fix, then stage and rerun the small live slice again; the current active rerun uses the older scorer and is diagnostic only.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
