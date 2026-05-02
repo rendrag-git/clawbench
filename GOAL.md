@@ -33,6 +33,7 @@ Each capability has an Acceptance checklist. Items are marked complete only when
    - [x] Every behavior listed above has a covering task; calibration schema validation in `openclaw_bench/calibration.py`.
    - [ ] Live floor calibration record for tier-small (run-id, commit, model id, KV mode, context, concurrency, score, date).
    - [ ] Live floor + ceiling records for tier-medium, tier-large, tier-xlarge.
+   - [ ] Multi-seed reliability metrics (`pass^k`, worst-of-n, pass-rate) recorded for every calibration run with `--runs-per-task ≥ 3`. Adopted from `openclaw/clawbench` upstream after the audit found 47 % of their 40-task variance was seed noise; single-run scoring can't tell a 90 % model from a flaky 90 %/20 % one.
 
 3. **Provider breadth — inspect-first, four runtimes**
 
@@ -133,8 +134,9 @@ Maintained as the canonical view of what is done, in flight, and blocked. Update
 
 ### In Progress
 
-- **Bridge:** the next action feeds Capability 3 / Acceptance item "Ollama generator implemented and validated against a live Ollama instance." Output enters product state when `oc-bench init --providers local` discovers a real Ollama server and produces a route config that survives `oc-bench provider-preflight`. Until then, Ollama remains a detect-only stub.
-- 2026-05-02, no active work on master after the GOAL.md reframe + `provider-detection` slice closure. Next action: stand up Ollama on the RTX Pro 5000 (GPU 1, alongside or replacing GPT-OSS), capture its `/api/tags` response shape, write `openclaw_bench/providers/ollama.py.generate_route_config` per the OpenClaw Ollama provider docs, validate end-to-end with `oc-bench provider-preflight --provider ollama`.
+- **Bridge:** the multi-seed work feeds Capability 2 / Acceptance item "Multi-seed reliability metrics (`pass^k`, worst-of-n, pass-rate) recorded for every calibration run." Output enters product state when an `oc-bench run --runs-per-task 3 ...` produces a `summary.md` with a Reliability section that names per-task `pass^k` numbers backed by attempt rows in `attempts.jsonl`.
+- 2026-05-02, branch `feature/multi-seed-runs` open. Items in flight: `--runs-per-task` CLI flag → runner loop with `run_index` per attempt → `openclaw_bench/aggregation.py` for pure metric computation → reporting wires it into `summary.md`/`summary.json` → tests (unit + simulator end-to-end). Single PR; user merges. Once merged, follow-up PR adds bootstrap CIs + Taguchi S/N (item 2 from the upstream audit) and a third PR adds the `tier-audit` SNR decomposition (item 3).
+- Bridge for parallel track: Capability 3 / Ollama generator remains the next non-reliability priority. Stand up Ollama on the RTX Pro 5000 (GPU 1, alongside or replacing GPT-OSS), capture its `/api/tags` response shape, write `openclaw_bench/providers/ollama.py.generate_route_config` per the OpenClaw Ollama provider docs, validate end-to-end with `oc-bench provider-preflight --provider ollama`.
 
 ### Blockers / Open Questions
 
@@ -150,4 +152,5 @@ Append-only. One line per continuation turn.
 
 ```
 - 2026-05-02 04:30 UTC, restructured GOAL.md to capability-and-acceptance format per codex-goal-loop template; reframed M5 as deferred side investigation (commit cb951f7); seeded Progress section with state from M3 deployment-surface slice. next: pick up Capability 3 / Ollama generator — stand up Ollama on RTX Pro 5000 and validate `oc-bench provider-preflight --provider ollama`.
+- 2026-05-02 05:00 UTC, audit of openclaw/clawbench upstream identified three adoptable patterns (multi-seed runs + pass^k aggregation, bootstrap CIs + Taguchi S/N, per-task SNR variance decomposition). Added new Capability 2 acceptance bullet for multi-seed reliability metrics. Started feature branch `feature/multi-seed-runs` for item 1. next: implement runner loop over `--runs-per-task N`, add aggregation module, wire reliability into reports, open PR.
 ```
