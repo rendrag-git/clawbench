@@ -327,6 +327,48 @@ class CloneProfileSafetyTests(unittest.TestCase):
             )
         self.assertIn("nonexistent-provider", str(cm.exception))
 
+    def test_route_referencing_unknown_model_in_known_provider_raises(self):
+        # PR #8 review (chatgpt-codex-connector P2): provider key alone is not
+        # enough — the model id half of the route must also exist in that
+        # provider's models[*].id list, or the cloned profile looks valid but
+        # fails at agent-turn time.
+        src = _vllm_only_source()
+        with self.assertRaises(ValueError) as cm:
+            clone_profile(
+                src,
+                bench_profile="bench-pmg",
+                gateway_port=19350,
+                bench_route_model="vllm/nonexistent-model",
+            )
+        self.assertIn("nonexistent-model", str(cm.exception))
+        self.assertIn("vllm", str(cm.exception))
+
+    def test_route_pointing_at_correct_model_in_multi_provider_source_succeeds(self):
+        # Companion sanity test: explicit route referencing a model that DOES
+        # exist in the source's providers must pass validation.
+        src = _multi_provider_source()
+        clone = clone_profile(
+            src,
+            bench_profile="bench-pmg",
+            gateway_port=19350,
+            gateway_token="t",
+            bench_route_model="ollama/qwen3:8b",
+        )
+        self.assertEqual(clone["agents"]["defaults"]["model"], "ollama/qwen3:8b")
+
+    def test_source_default_route_pointing_at_dropped_model_raises(self):
+        # Edge case: source profile has a stale agents.defaults.model that
+        # references a model the providers block no longer lists. The clone
+        # should reject it rather than paper over the inconsistency.
+        src = _vllm_only_source()
+        # Mutate providers list to drop the model the default points at.
+        src["models"]["providers"]["vllm"]["models"] = [
+            {"id": "different-model", "name": "different-model", "contextWindow": 16000}
+        ]
+        with self.assertRaises(ValueError) as cm:
+            clone_profile(src, bench_profile="bench-pmg", gateway_port=19350)
+        self.assertIn("qwen3.5-4b", str(cm.exception))
+
 
 class ModelManifestFromProfileTests(unittest.TestCase):
     def test_vllm_only_profile_yields_one_row(self):

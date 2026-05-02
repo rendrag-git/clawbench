@@ -109,6 +109,26 @@ def clone_profile(
             f"not configured in the source profile (have: {sorted(providers_block)})"
         )
 
+    # Verify the model id half of the route is actually in that provider's
+    # models list. Catches the case where a route looks valid (provider exists)
+    # but points at a model the provider doesn't serve — would produce a
+    # cloned profile that fails at agent-turn time rather than at clone time.
+    model_suffix = route.split("/", 1)[1]
+    provider_models = (providers_block[provider_key] or {}).get("models") or []
+    configured_model_ids: list[str] = []
+    for entry in provider_models:
+        if not isinstance(entry, dict):
+            continue
+        model_id = entry.get("id")
+        if isinstance(model_id, str):
+            configured_model_ids.append(model_id)
+    if model_suffix not in configured_model_ids:
+        raise ValueError(
+            f"route '{route}' references model '{model_suffix}' which is not "
+            f"in provider '{provider_key}' configured models "
+            f"(have: {sorted(configured_model_ids)})"
+        )
+
     # Overlay 1: gateway — bench-isolated port + fresh token, preserve bind/mode/tailscale.
     gateway = cloned.setdefault("gateway", {})
     gateway["port"] = int(gateway_port)
