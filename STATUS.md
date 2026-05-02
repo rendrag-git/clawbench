@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:04 UTC
+Last updated: 2026-05-02 00:07 UTC
 
 ## Runtime
 
@@ -148,6 +148,7 @@ M2 small-floor live rerun in progress:
 - Log: `/tmp/live-m2-small-floor-qwen35-rerun-20260502000224.log`
 - Process: parent shell PID `121009`, benchmark Python PID `121010`
 - Preflight: pass.
+- Coverage note: the generated model manifest has `contexts: [32768]`, so runner task filtering skips `small-workspace-needle-4k` (`context_sizes: [4096]`). This rerun can diagnose the 32k-compatible strict-JSON and patch tasks, but it cannot by itself become a complete `tier-small` calibration record.
 
 Previous M2 live calibration candidate completed:
 
@@ -187,23 +188,10 @@ Latest result directory:
 
 Result summary:
 
-- Live anchor rerun complete.
-- Log: `/tmp/live-m1-qwen35-rerun-20260501225000.log`
-- Gateway startup: pass.
-- vLLM health: pass.
-- vLLM direct route probe: pass.
-- OpenClaw route smoke: pass.
-- Benchmark attempts: `1`
-- Benchmark failures: `0`
-- Failure type: none
-- Score: `1.0`
-- Pass rate: `100%`
-- Wall time: `200.328s`
-- Tool calls: `10`
-- OpenClaw version for the staged run: `OpenClaw 2026.4.27 (cbc2ba0)`.
-- Live anchor record: run id `live-m1-qwen35-rerun-20260501225000`, code commit `a9fd98b`, model `qwen3.5-4b`, KV mode `provider_default`, context `32768`, concurrency `1`, date `2026-05-01`.
-- The model returned a runnable equivalent command:
-  - `python tests/test_api.py`
+- Pending. The active rerun has written `config.json` and the first workspace, but no `attempts.jsonl` or `summary.json` yet as of `2026-05-02 00:06 UTC`.
+- This run is expected to produce only the `tier-small` tasks whose `context_sizes` are empty or include `32768`.
+- A complete small-floor calibration record still needs a 4096-context pass over the 4k needle task or a model manifest that includes both required small-tier contexts.
+- Previous M1 live anchor record: run id `live-m1-qwen35-rerun-20260501225000`, code commit `a9fd98b`, model `qwen3.5-4b`, KV mode `provider_default`, context `32768`, concurrency `1`, date `2026-05-01`.
 - Prior post-fix live run: `/tmp/oc-bench-root-m1-20260501223143/results/live-m1-qwen35-20260501223143`
   - Preflight: pass
   - vLLM health: pass
@@ -297,4 +285,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 
 - Task-gap coverage is now present across the M2 tier manifests. Next M2 blocker: live floor/ceiling calibration records for every tier.
 - Poll `live-m2-small-floor-qwen35-rerun-20260502000224`; if it completes, record score/pass rate and decide whether it supports the small-floor calibration threshold.
+- Do not treat the active 32k-only small rerun as complete `tier-small` coverage; it skips `small-workspace-needle-4k`. After it completes, run the missing 4096-context needle coverage before creating a durable small-floor calibration record.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
