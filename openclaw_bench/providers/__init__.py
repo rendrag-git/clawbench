@@ -1,3 +1,4 @@
+from .detect import DetectionReport, ProviderCandidate
 from .probes import (
     DockerExecProbe,
     IncusExecProbe,
@@ -8,10 +9,12 @@ from .probes import (
 )
 
 __all__ = [
+    "DetectionReport",
     "DockerExecProbe",
     "IncusExecProbe",
     "LocalProbe",
     "Probe",
     "ProbeResult",
+    "ProviderCandidate",
     "SSHProbe",
 ]
