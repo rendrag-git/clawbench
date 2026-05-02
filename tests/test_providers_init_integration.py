@@ -1,6 +1,8 @@
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+import io
 from pathlib import Path
 from unittest.mock import patch
 
@@ -66,6 +68,76 @@ class InitWithDetectionTests(unittest.TestCase):
             self.assertEqual(
                 config["models"]["providers"]["vllm"]["models"][0]["id"], "fallback-model"
             )
+
+    def test_no_detect_vllm_flags_use_provider_parameter_shaping(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            bench = Path(tmp) / "bench"
+            exit_code = cli_main(
+                [
+                    "init",
+                    "--providers", "local",
+                    "--no-detect",
+                    "--vllm-base-url", "http://10.68.198.1:8000/v1",
+                    "--vllm-model", "gpt-oss-20b",
+                    "--bench-root", str(bench),
+                    "--config-home", str(home),
+                    "--gateway-port", "19223",
+                    "--no-validate",
+                ]
+            )
+            self.assertEqual(exit_code, 0)
+            config = json.loads((home / ".openclaw-benchclaw" / "openclaw.json").read_text())
+            params = config["agents"]["defaults"]["models"]["vllm/gpt-oss-20b"]["params"]
+            self.assertEqual(params["extra_body"], {"reasoning_effort": "low"})
+
+    def test_init_rejects_detect_only_provider_without_default_vllm_fallback(self):
+        candidate = ProviderCandidate(
+            provider="ollama",
+            base_url="http://127.0.0.1:11434",
+            models=["llama3.1:8b"],
+            probe_results={"host": _ok("{}")},
+            source="port_probe",
+        )
+        report = DetectionReport(candidates=(candidate,), findings=())
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            bench = Path(tmp) / "bench"
+            buf = io.StringIO()
+            with patch("openclaw_bench.cli.run_detection", return_value=report), redirect_stdout(buf):
+                exit_code = cli_main(
+                    [
+                        "init",
+                        "--providers", "local",
+                        "--bench-root", str(bench),
+                        "--config-home", str(home),
+                        "--gateway-port", "19225",
+                        "--no-validate",
+                    ]
+                )
+        self.assertEqual(exit_code, 2)
+        self.assertFalse((home / ".openclaw-benchclaw" / "openclaw.json").exists())
+        self.assertIn("cannot generate yet", buf.getvalue())
+        self.assertIn("ollama", buf.getvalue())
+
+    def test_init_forwards_probe_hosts_to_detection(self):
+        report = DetectionReport(candidates=(), findings=())
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            bench = Path(tmp) / "bench"
+            with patch("openclaw_bench.cli.run_detection", return_value=report) as detect_mock:
+                cli_main(
+                    [
+                        "init",
+                        "--providers", "local",
+                        "--bench-root", str(bench),
+                        "--config-home", str(home),
+                        "--gateway-port", "19226",
+                        "--probe-hosts", "127.0.0.1,10.68.198.1",
+                        "--no-validate",
+                    ]
+                )
+        self.assertEqual(detect_mock.call_args.kwargs["probe_hosts"], ["127.0.0.1", "10.68.198.1"])
 
     def test_zero_candidates_with_detect_aborts_with_clear_error(self):
         report = DetectionReport(candidates=(), findings=())

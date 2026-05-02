@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,7 +16,7 @@ class ProviderCandidate:
     base_url: str
     models: list[str]
     probe_results: dict[str, ProbeResult]
-    source: str  # "already_known" | "port_probe"
+    source: str  # "already_known" | "port_probe" | "explicit"
     # Only set when source == "already_known": absolute path to the source
     # OC profile's openclaw.json. Lets the inherit path clone the full
     # profile config rather than regenerate it from scratch.
@@ -141,7 +142,7 @@ def run_detection(
     candidates: list[ProviderCandidate] = []
     findings: list[str] = []
 
-    already_known = scan_existing_oc_profiles(home)
+    already_known = scan_existing_oc_profiles(home, probes=probes)
     known_by_provider = {c.provider: c for c in already_known}
 
     for provider in providers:
@@ -221,7 +222,7 @@ def _probe_from_override(spec: str) -> Probe:
     )
 
 
-def scan_existing_oc_profiles(home: Path) -> list[ProviderCandidate]:
+def scan_existing_oc_profiles(home: Path, probes: list | None = None) -> list[ProviderCandidate]:
     home = Path(home).expanduser()
     candidates: list[ProviderCandidate] = []
     for profile_dir in sorted(home.glob(".openclaw*")):
@@ -229,29 +230,83 @@ def scan_existing_oc_profiles(home: Path) -> list[ProviderCandidate]:
         if not config_path.is_file():
             continue
         try:
-            payload = json.loads(config_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        providers = (((payload or {}).get("models") or {}).get("providers") or {})
-        for key, block in providers.items():
-            if key not in KNOWN_PROVIDERS:
-                continue
-            base_url = (block or {}).get("baseUrl")
-            if not isinstance(base_url, str):
-                continue
-            model_ids: list[str] = []
-            for entry in (block or {}).get("models") or []:
-                model_id = (entry or {}).get("id") if isinstance(entry, dict) else None
-                if isinstance(model_id, str):
-                    model_ids.append(model_id)
-            candidates.append(
-                ProviderCandidate(
-                    provider=key,
-                    base_url=base_url,
-                    models=model_ids,
-                    probe_results={},
-                    source="already_known",
+            candidates.extend(
+                _candidates_from_config_text(
+                    config_path.read_text(encoding="utf-8"),
                     source_profile_path=str(config_path),
                 )
             )
+        except (OSError, json.JSONDecodeError):
+            continue
+    for probe in probes or []:
+        candidates.extend(_scan_runtime_oc_profiles(probe))
     return candidates
+
+
+def _candidates_from_config_text(text: str, *, source_profile_path: str | None = None) -> list[ProviderCandidate]:
+    payload = json.loads(text)
+    candidates: list[ProviderCandidate] = []
+    providers = (((payload or {}).get("models") or {}).get("providers") or {})
+    for key, block in providers.items():
+        if key not in KNOWN_PROVIDERS:
+            continue
+        base_url = (block or {}).get("baseUrl")
+        if not isinstance(base_url, str):
+            continue
+        model_ids: list[str] = []
+        for entry in (block or {}).get("models") or []:
+            model_id = (entry or {}).get("id") if isinstance(entry, dict) else None
+            if isinstance(model_id, str):
+                model_ids.append(model_id)
+        candidates.append(
+            ProviderCandidate(
+                provider=key,
+                base_url=base_url,
+                models=model_ids,
+                probe_results={},
+                source="already_known",
+                source_profile_path=source_profile_path,
+            )
+        )
+    return candidates
+
+
+def _scan_runtime_oc_profiles(probe) -> list[ProviderCandidate]:
+    from .probes import DockerExecProbe, IncusExecProbe  # noqa: PLC0415
+
+    if isinstance(probe, IncusExecProbe):
+        cmd = ["incus", "exec", probe.instance, "--", "sh", "-lc", _profile_scan_script()]
+    elif isinstance(probe, DockerExecProbe):
+        cmd = ["docker", "exec", probe.container, "sh", "-lc", _profile_scan_script()]
+    else:
+        return []
+    try:
+        proc = subprocess.run(cmd, text=True, capture_output=True, timeout=10, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if proc.returncode != 0:
+        return []
+    candidates: list[ProviderCandidate] = []
+    for text in _split_profile_scan_output(proc.stdout):
+        try:
+            candidates.extend(_candidates_from_config_text(text))
+        except json.JSONDecodeError:
+            continue
+    return candidates
+
+
+def _profile_scan_script() -> str:
+    return r'''
+for base in "$HOME" /home/* /root; do
+  [ -d "$base" ] || continue
+  for f in "$base"/.openclaw*/openclaw.json; do
+    [ -f "$f" ] || continue
+    printf '\n---OC_BENCH_PROFILE---\n'
+    cat "$f"
+  done
+done
+'''
+
+
+def _split_profile_scan_output(output: str) -> list[str]:
+    return [part.strip() for part in output.split("---OC_BENCH_PROFILE---") if part.strip()]

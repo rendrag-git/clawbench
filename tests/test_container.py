@@ -5,11 +5,17 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from openclaw_bench.container import _docker_run_command, ensure_openclaw_container
+from openclaw_bench.container import _docker_run_command, ensure_openclaw_container, runtime_exec_prefix, runtime_kind_target
 from openclaw_bench.models import ModelSpec
 
 
 class ContainerEnsureTests(unittest.TestCase):
+    def test_runtime_kind_target_treats_plain_container_as_docker(self):
+        self.assertEqual(runtime_kind_target("oc-bench-gateway"), ("docker", "oc-bench-gateway"))
+
+    def test_runtime_exec_prefix_supports_incus(self):
+        self.assertEqual(runtime_exec_prefix("incus:oc-stack"), ["incus", "exec", "oc-stack", "--"])
+
     def test_existing_running_container_is_reused(self):
         completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="true\n", stderr="")
         with tempfile.TemporaryDirectory() as tmp:

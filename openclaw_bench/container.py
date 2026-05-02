@@ -24,6 +24,24 @@ class ContainerEnsureResult:
         return {"name": self.name, "status": self.status, "notes": self.notes}
 
 
+def runtime_kind_target(runtime: str) -> tuple[str, str]:
+    if ":" not in runtime:
+        return "docker", runtime
+    kind, _, target = runtime.partition(":")
+    kind = kind.strip().lower()
+    target = target.strip()
+    if kind not in {"docker", "incus"} or not target:
+        raise ValueError(f"unsupported OpenClaw runtime {runtime!r}; use docker:<container> or incus:<instance>")
+    return kind, target
+
+
+def runtime_exec_prefix(runtime: str) -> list[str]:
+    kind, target = runtime_kind_target(runtime)
+    if kind == "incus":
+        return ["incus", "exec", target, "--"]
+    return ["docker", "exec", target]
+
+
 def ensure_openclaw_container(
     *,
     container: str,

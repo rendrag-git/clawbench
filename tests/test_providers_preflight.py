@@ -132,3 +132,20 @@ class CheckProviderHealthTests(unittest.TestCase):
                 "http://10.68.198.1:8000/v1", None, 5, provider="vllm"
             )
         self.assertEqual(check.status, "pass")
+
+    def test_plain_container_name_uses_docker_probe(self):
+        success = ProbeResult(
+            ok=True, status_code=200, body='{"data":[]}', probe_name="docker:oc", error=None
+        )
+        with patch("openclaw_bench.providers.probes.DockerExecProbe") as fake_probe_cls:
+            fake_probe = MagicMock()
+            fake_probe.http_get.return_value = success
+            fake_probe_cls.return_value = fake_probe
+            check = _check_provider_health(
+                "http://10.68.198.1:8000/v1",
+                "oc",
+                5,
+                provider="vllm",
+            )
+        self.assertEqual(check.status, "pass")
+        fake_probe_cls.assert_called_once_with("oc")

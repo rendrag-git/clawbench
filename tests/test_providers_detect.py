@@ -76,6 +76,37 @@ class ScanExistingProfilesTests(unittest.TestCase):
             entries = scan_existing_oc_profiles(home)
         self.assertEqual(entries, [])
 
+    def test_scan_reads_incus_runtime_profiles(self):
+        output = """
+---OC_BENCH_PROFILE---
+{"models":{"providers":{"vllm":{"baseUrl":"http://10.68.198.1:8000/v1","models":[{"id":"gpt-oss-20b"}]}}}}
+"""
+        completed = unittest.mock.Mock(returncode=0, stdout=output, stderr="")
+        from openclaw_bench.providers.probes import IncusExecProbe
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch("subprocess.run", return_value=completed) as run_mock:
+                entries = scan_existing_oc_profiles(Path(tmp), probes=[IncusExecProbe("oc-stack")])
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].provider, "vllm")
+        self.assertEqual(entries[0].models, ["gpt-oss-20b"])
+        self.assertEqual(run_mock.call_args.args[0][:4], ["incus", "exec", "oc-stack", "--"])
+
+    def test_scan_reads_docker_runtime_profiles(self):
+        output = """
+---OC_BENCH_PROFILE---
+{"models":{"providers":{"ollama":{"baseUrl":"http://127.0.0.1:11434","models":[{"id":"llama3.1:8b"}]}}}}
+"""
+        completed = unittest.mock.Mock(returncode=0, stdout=output, stderr="")
+        from openclaw_bench.providers.probes import DockerExecProbe
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch("subprocess.run", return_value=completed) as run_mock:
+                entries = scan_existing_oc_profiles(Path(tmp), probes=[DockerExecProbe("oc")])
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].provider, "ollama")
+        self.assertEqual(run_mock.call_args.args[0][:3], ["docker", "exec", "oc"])
+
 
 from unittest.mock import MagicMock
 
@@ -185,6 +216,24 @@ class RunDetectionTests(unittest.TestCase):
         self.assertEqual(len(report.candidates), 1)
         self.assertEqual(report.candidates[0].source, "port_probe")
         self.assertEqual(report.candidates[0].models, ["gpt-oss-20b"])
+
+    def test_runtime_already_known_short_circuits_port_probe(self):
+        output = """
+---OC_BENCH_PROFILE---
+{"models":{"providers":{"vllm":{"baseUrl":"http://10.68.198.1:8000/v1","models":[{"id":"gpt-oss-20b"}]}}}}
+"""
+        completed = unittest.mock.Mock(returncode=0, stdout=output, stderr="")
+        from openclaw_bench.providers.probes import IncusExecProbe
+
+        with tempfile.TemporaryDirectory() as tmp:
+            host = MagicMock()
+            host.name = "host"
+            runtime = IncusExecProbe("oc-stack")
+            with unittest.mock.patch("subprocess.run", return_value=completed):
+                report = run_detection(providers=["vllm"], probes=[host, runtime], home=Path(tmp))
+        self.assertEqual(len(report.candidates), 1)
+        self.assertEqual(report.candidates[0].source, "already_known")
+        host.http_get.assert_not_called()
 
     def test_zero_candidates_yields_empty_report(self):
         with tempfile.TemporaryDirectory() as tmp:

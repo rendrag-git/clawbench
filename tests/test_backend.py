@@ -95,6 +95,16 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(cmd[:4], ["docker", "exec", "oc-bench-gateway", "openclaw"])
         self.assertIn("--profile", cmd)
 
+    def test_openclaw_incus_runtime_smoke_uses_incus_exec(self):
+        backend = OpenClawBackend(profile="bench", container="incus:oc-stack")
+        model = ModelSpec(model_id="model", served_model_name="provider/model")
+        with patch("subprocess.Popen", return_value=_FakeProcess(returncode=0, stdout='{"text":"ok"}', stderr="")) as popen_mock:
+            response = backend.smoke(model, timeout_s=1)
+        self.assertIsNone(response.error)
+        cmd = popen_mock.call_args.args[0]
+        self.assertEqual(cmd[:5], ["incus", "exec", "oc-stack", "--", "openclaw"])
+        self.assertIn("--profile", cmd)
+
     def test_openclaw_error_counts_as_request_error(self):
         backend = OpenClawBackend(local=True)
         model = ModelSpec(model_id="model", served_model_name="provider/model")
@@ -208,6 +218,21 @@ class BackendTests(unittest.TestCase):
         cmd = popen_mock.call_args.args[0]
         self.assertEqual(cmd[:4], ["docker", "exec", "-w", str(workspace)])
         self.assertEqual(cmd[4:6], ["oc-bench-gateway", "openclaw"])
+        self.assertIsNone(popen_mock.call_args.kwargs["cwd"])
+
+    def test_openclaw_incus_runtime_agent_run_sets_runtime_cwd(self):
+        backend = OpenClawBackend(profile="bench", container="incus:oc-stack")
+        model = ModelSpec(model_id="model", served_model_name="served", openclaw_model_name="vllm/served")
+        task = _Task()
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            workspace.mkdir()
+            with patch("subprocess.Popen", return_value=_FakeProcess(returncode=0, stdout='{"text":"ok"}', stderr="")) as popen_mock:
+                response = backend.run(model, task, workspace, "run-w000-task-abcdef", timeout_s=30)
+        self.assertIsNone(response.error)
+        cmd = popen_mock.call_args.args[0]
+        self.assertEqual(cmd[:5], ["incus", "exec", "oc-stack", "--cwd", str(workspace)])
+        self.assertEqual(cmd[5:7], ["--", "openclaw"])
         self.assertIsNone(popen_mock.call_args.kwargs["cwd"])
 
     def test_workspace_agent_setup_failure_is_reported_before_attempt(self):

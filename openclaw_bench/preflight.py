@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -11,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .backend import OpenClawBackend
-from .container import DEFAULT_GATEWAY_PORT, gateway_run_command
+from .container import DEFAULT_GATEWAY_PORT, gateway_run_command, runtime_exec_prefix, runtime_kind_target
 from .models import ModelSpec, SuiteManifest, TaskSpec
 from .workspace import OPENCLAW_SEED_FILES, copy_fixture, seed_openclaw_workspace_files
 
@@ -255,7 +256,7 @@ def _check_output_path(path: Path, name: str) -> PreflightCheck:
 
 
 def _check_container_path(path: Path, container: str, name: str) -> PreflightCheck:
-    cmd = ["docker", "exec", container, "test", "-d", str(path), "-a", "-w", str(path)]
+    cmd = [*runtime_exec_prefix(container), "test", "-d", str(path), "-a", "-w", str(path)]
     try:
         proc = subprocess.run(cmd, text=True, capture_output=True, timeout=10, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -345,13 +346,19 @@ def _check_openclaw(
 ) -> list[PreflightCheck]:
     checks = []
     if container:
-        docker = shutil.which("docker")
-        if docker is None:
-            return [PreflightCheck("openclaw_cli", "fail", "docker executable not found for --openclaw-container")]
-        checks.append(PreflightCheck("openclaw_cli", "pass", f"docker exec {container} openclaw"))
+        kind, target = runtime_kind_target(container)
+        executable = shutil.which(kind)
+        if executable is None:
+            return [PreflightCheck("openclaw_cli", "fail", f"{kind} executable not found for --openclaw-container/--oc-runtime")]
+        checks.append(PreflightCheck("openclaw_cli", "pass", f"{kind} exec {target} openclaw"))
     else:
         executable = shutil.which("openclaw")
         if executable is None:
+            if local:
+                return [
+                    PreflightCheck("openclaw_cli", "fail", "openclaw executable not found"),
+                    PreflightCheck("openclaw_gateway", "warn", "--openclaw-local skips gateway requirement"),
+                ]
             return [PreflightCheck("openclaw_cli", "fail", "openclaw executable not found")]
         checks.append(PreflightCheck("openclaw_cli", "pass", executable))
     version_check = check_openclaw_version(container)
@@ -634,21 +641,26 @@ def ensure_openclaw_gateway(profile: str, container: str | None = None, timeout_
     )
 
 
-def stop_openclaw_gateway(profile: str, timeout_s: int = 30) -> PreflightCheck:
-    foreground = _stop_foreground_gateway(profile, timeout_s)
+def stop_openclaw_gateway(profile: str, container: str | None = None, timeout_s: int = 30) -> PreflightCheck:
+    foreground = _stop_foreground_gateway(profile, timeout_s, container)
     if foreground.status == "pass":
         return PreflightCheck("openclaw_gateway_stop", "pass", foreground.notes)
 
-    cmd = ["openclaw", "--profile", profile, "gateway", "stop"]
+    cmd = [*_openclaw_cmd(container), "--profile", profile, "gateway", "stop"]
     try:
         proc = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout_s, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return PreflightCheck("openclaw_gateway_stop", "fail", str(exc))
     output = f"{proc.stdout}\n{proc.stderr}".strip()
     if proc.returncode != 0:
+        runtime_kill = _stop_runtime_gateway_process(profile, container, timeout_s)
+        if runtime_kill is not None and runtime_kill.status == "pass":
+            return PreflightCheck("openclaw_gateway_stop", "pass", runtime_kill.notes)
         notes = _trim_output(output)
         if foreground.status == "fail":
             notes = _join_gateway_notes(notes, foreground.notes)
+        if runtime_kill is not None and runtime_kill.status == "fail":
+            notes = _join_gateway_notes(notes, runtime_kill.notes)
         return PreflightCheck("openclaw_gateway_stop", "fail", notes)
     if foreground.status == "fail":
         return PreflightCheck("openclaw_gateway_stop", "fail", foreground.notes)
@@ -674,7 +686,10 @@ def _join_gateway_notes(prefix: str, notes: str) -> str:
 def _openclaw_cmd(container: str | None = None) -> list[str]:
     if not container:
         return ["openclaw"]
-    return ["docker", "exec", container, "openclaw"]
+    kind, target = runtime_kind_target(container)
+    if kind == "incus":
+        return ["incus", "exec", target, "--", "openclaw"]
+    return ["docker", "exec", target, "openclaw"]
 
 
 def _start_gateway_process(profile: str, container: str | None = None, timeout_s: int = 60) -> PreflightCheck:
@@ -687,7 +702,7 @@ def _start_gateway_process(profile: str, container: str | None = None, timeout_s
         output = f"{start.stdout}\n{start.stderr}".strip()
         if start.returncode != 0:
             return PreflightCheck("openclaw_gateway_start", "fail", _trim_output(output))
-        return PreflightCheck("openclaw_gateway_start", "pass", _trim_output(output) or "started detached gateway in container")
+        return PreflightCheck("openclaw_gateway_start", "pass", _trim_output(output) or "started detached gateway in runtime")
 
     start_cmd = _gateway_start_cmd(profile, None)
     try:
@@ -709,11 +724,34 @@ def _start_gateway_process(profile: str, container: str | None = None, timeout_s
 
 def _gateway_start_cmd(profile: str, container: str | None = None) -> list[str]:
     if container:
-        return ["docker", "exec", "-d", container, "sh", "-lc", gateway_run_command(profile, DEFAULT_GATEWAY_PORT)]
+        kind, target = runtime_kind_target(container)
+        command = gateway_run_command(profile, DEFAULT_GATEWAY_PORT)
+        if kind == "incus":
+            return [
+                "incus",
+                "exec",
+                target,
+                "--",
+                "sh",
+                "-lc",
+                f"nohup {command} >{_runtime_gateway_log_path(profile)} 2>&1 </dev/null &",
+            ]
+        return ["docker", "exec", "-d", target, "sh", "-lc", command]
     return ["openclaw", "--profile", profile, "gateway", "--dev", "--verbose", "run"]
 
 
-def _stop_foreground_gateway(profile: str, timeout_s: int = 30) -> PreflightCheck:
+def _runtime_gateway_log_path(profile: str) -> str:
+    return f"/tmp/oc-bench-gateway-{_safe_path_part(profile)}.log"
+
+
+def _stop_foreground_gateway(profile: str, timeout_s: int = 30, container: str | None = None) -> PreflightCheck:
+    if container:
+        kind, _ = runtime_kind_target(container)
+        return PreflightCheck(
+            "openclaw_gateway_foreground_stop",
+            "warn",
+            f"{kind} runtime gateways are stopped through the runtime OpenClaw command",
+        )
     pid_path = _gateway_pid_path(profile)
     if not pid_path.exists():
         return PreflightCheck("openclaw_gateway_foreground_stop", "warn", f"no foreground pid file at {pid_path}")
@@ -741,6 +779,25 @@ def _stop_foreground_gateway(profile: str, timeout_s: int = 30) -> PreflightChec
             return PreflightCheck("openclaw_gateway_foreground_stop", "pass", f"stopped foreground gateway pid {pid}")
         time.sleep(0.2)
     return PreflightCheck("openclaw_gateway_foreground_stop", "fail", f"foreground gateway pid {pid} did not stop within {timeout_s}s")
+
+
+def _stop_runtime_gateway_process(profile: str, container: str | None, timeout_s: int) -> PreflightCheck | None:
+    if not container:
+        return None
+    kind, _ = runtime_kind_target(container)
+    pattern = f"openclaw.*--profile {shlex.quote(profile)}.*gateway.*run"
+    cmd = [*runtime_exec_prefix(container), "sh", "-lc", f"pkill -f {shlex.quote(pattern)}"]
+    try:
+        proc = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout_s, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return PreflightCheck("openclaw_gateway_runtime_stop", "fail", str(exc))
+    output = f"{proc.stdout}\n{proc.stderr}".strip()
+    if proc.returncode in {0, 1}:
+        note = f"stopped {kind} runtime gateway for profile {profile}"
+        if proc.returncode == 1:
+            note = f"no {kind} runtime gateway process matched profile {profile}"
+        return PreflightCheck("openclaw_gateway_runtime_stop", "pass", note)
+    return PreflightCheck("openclaw_gateway_runtime_stop", "fail", _trim_output(output))
 
 
 def _gateway_pid_path(profile: str) -> Path:
@@ -832,16 +889,18 @@ def _check_provider_health(
     url = base_url.rstrip("/") + "/models"
     if container is None:
         probe = LocalProbe()
-    elif container_kind == "docker":
-        probe = DockerExecProbe(container)
-    elif container_kind == "incus":
-        probe = IncusExecProbe(container)
     else:
-        return PreflightCheck(
-            "provider_health",
-            "fail",
-            f"unsupported container_kind={container_kind!r}; use incus or docker",
-        )
+        container_kind, container = runtime_kind_target(container)
+        if container_kind == "docker":
+            probe = DockerExecProbe(container)
+        elif container_kind == "incus":
+            probe = IncusExecProbe(container)
+        else:
+            return PreflightCheck(
+                "provider_health",
+                "fail",
+                f"unsupported container_kind={container_kind!r}; use incus or docker",
+            )
     try:
         result = probe.http_get(
             url,

@@ -11,9 +11,11 @@ from openclaw_bench.models import BackendResponse, ModelSpec
 from openclaw_bench.preflight import (
     OPENCLAW_PINNED_VERSION,
     _check_gateway,
+    _gateway_start_cmd,
     check_openclaw_version,
     ensure_openclaw_gateway,
     run_preflight,
+    stop_openclaw_gateway,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -369,6 +371,48 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(calls[1][:5], ["docker", "exec", "-d", "oc-bench-gateway", "sh"])
         self.assertIn("--profile bench gateway --port 19091", calls[1][-1])
         self.assertIn("--verbose", calls[1][-1])
+
+    def test_openclaw_version_uses_incus_runtime(self):
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=f"openclaw {OPENCLAW_PINNED_VERSION}\n",
+            stderr="",
+        )
+        with patch("subprocess.run", return_value=completed) as run_mock:
+            check = check_openclaw_version("incus:oc-stack")
+        self.assertEqual(check.status, "pass")
+        self.assertEqual(
+            run_mock.call_args.args[0],
+            ["incus", "exec", "oc-stack", "--", "openclaw", "--version"],
+        )
+
+    def test_gateway_start_command_uses_incus_detached_shell(self):
+        cmd = _gateway_start_cmd("bench", "incus:oc-stack")
+        self.assertEqual(cmd[:5], ["incus", "exec", "oc-stack", "--", "sh"])
+        self.assertIn("--profile bench gateway --port 19091", cmd[-1])
+        self.assertIn("/tmp/oc-bench-gateway-bench.log", cmd[-1])
+        self.assertIn("nohup", cmd[-1])
+        self.assertIn("&", cmd[-1])
+
+    def test_stop_gateway_uses_incus_runtime_command(self):
+        stopped = subprocess.CompletedProcess(args=[], returncode=0, stdout="stopped\n", stderr="")
+        with patch("subprocess.run", return_value=stopped) as run_mock:
+            check = stop_openclaw_gateway("bench", "incus:oc-stack")
+        self.assertEqual(check.status, "pass")
+        self.assertEqual(
+            run_mock.call_args.args[0],
+            ["incus", "exec", "oc-stack", "--", "openclaw", "--profile", "bench", "gateway", "stop"],
+        )
+
+    def test_stop_gateway_falls_back_to_runtime_process_kill(self):
+        stop_failed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="not running")
+        killed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        with patch("subprocess.run", side_effect=[stop_failed, killed]) as run_mock:
+            check = stop_openclaw_gateway("bench", "incus:oc-stack")
+        self.assertEqual(check.status, "pass")
+        self.assertEqual(run_mock.call_args_list[1].args[0][:5], ["incus", "exec", "oc-stack", "--", "sh"])
+        self.assertIn("pkill -f", run_mock.call_args_list[1].args[0][-1])
 
     def test_container_preflight_checks_container_openclaw_and_route_smoke(self):
         suite = load_suite(ROOT / "manifests" / "openclaw-agent-core.json")

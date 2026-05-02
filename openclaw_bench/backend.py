@@ -8,6 +8,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Protocol
 
+from .container import runtime_kind_target
 from .models import BackendResponse, ModelSpec, TaskSpec
 
 
@@ -39,10 +40,19 @@ class OpenClawBackend(AgentBackend):
     def _cmd(self, cwd: Path | None = None) -> list[str]:
         if not self.container:
             return ["openclaw"]
+        kind, target = runtime_kind_target(self.container)
+        if kind == "incus":
+            cmd = ["incus", "exec", target]
+            if cwd is not None:
+                cmd.extend(["--cwd", str(cwd)])
+            cmd.append("--")
+            cmd.append("openclaw")
+            return cmd
         cmd = ["docker", "exec"]
         if cwd is not None:
             cmd.extend(["-w", str(cwd)])
-        cmd.extend([self.container, "openclaw"])
+        cmd.append(target)
+        cmd.append("openclaw")
         return cmd
 
     def smoke(self, model: ModelSpec, timeout_s: int) -> BackendResponse:
@@ -437,8 +447,10 @@ def _ensure_workspace_agent(
 
 
 def _container_openclaw_cmd(container: str) -> list[str]:
-    return ["docker", "exec", container, "openclaw"]
-
+    kind, target = runtime_kind_target(container)
+    if kind == "incus":
+        return ["incus", "exec", target, "--", "openclaw"]
+    return ["docker", "exec", target, "openclaw"]
 
 def _agent_id(session_id: str) -> str:
     safe = "".join(char if char.isalnum() or char == "-" else "-" for char in session_id.lower())

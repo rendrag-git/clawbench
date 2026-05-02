@@ -38,10 +38,13 @@ def run_verify_command(workspace: Path, command: list[str], timeout_s: int = 60)
 def score_task(task: TaskSpec, workspace: Path, response: BackendResponse, changed: list[str], tests_passed: bool) -> tuple[float, str | None, int, str]:
     hallucinated = _hallucinated_paths(workspace, response)
     if hallucinated:
+        # Intent: fail answers that cite files the workspace does not contain.
         return 0.0, "hallucinated_file", hallucinated, "response referenced nonexistent workspace paths"
     if response.timed_out:
+        # Intent: separate backend timeouts from ordinary wrong or incomplete answers.
         return 0.0, "openclaw_timeout", hallucinated, "backend timed out"
     if response.error:
+        # Intent: preserve known backend failure taxonomy while quarantining unexpected errors.
         failure_type = response.error if response.error in FAILURE_TYPES else "unknown"
         return 0.0, failure_type, hallucinated, response.error
 
@@ -110,6 +113,7 @@ def score_task(task: TaskSpec, workspace: Path, response: BackendResponse, chang
         # Intent: preserve strict compact JSON after a long enough tool chain to expose format drift.
         checks.extend(_score_format_drift_under_length(task, workspace, response, changed))
     else:
+        # Intent: fail closed when a manifest names a task type the scorer does not implement.
         checks.append((False, f"unknown task type {task.task_type}"))
 
     if len(changed) > task.max_changed_files:
@@ -676,7 +680,7 @@ def _failure_type(task: TaskSpec, failed_notes: list[str], tests_passed: bool, h
         return "instruction_violation"
     if "policy file" in text or "OpenClaw seed" in text or "changed_files missing target file" in text:
         return "instruction_violation"
-    if "action gate" in text or "decision did not match" in text or "preserved file" in text:
+    if "action gate" in text or "decision did not match" in text:
         return "instruction_violation"
     if "read-only task changed files" in text or "tests were edited" in text or "dependencies were edited" in text or "helper" in text:
         return "instruction_violation"

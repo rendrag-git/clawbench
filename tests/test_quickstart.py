@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from openclaw_bench.cli import init_command, quickstart_command
 from openclaw_bench.preflight import PreflightCheck
+from openclaw_bench.providers import ProviderCandidate
 from openclaw_bench.quickstart import (
     DEFAULT_PROFILE,
     OPENCLAW_CONFIG_VERSION,
@@ -64,7 +65,11 @@ class QuickstartTests(unittest.TestCase):
             self.assertTrue(config["meta"]["lastTouchedAt"].endswith("Z"))
             self.assertEqual(
                 config["agents"]["defaults"]["models"]["vllm/gpt-oss-20b-nvfp4-smoke"]["params"],
-                {"maxTokens": 256, "chatTemplateKwargs": {"enable_thinking": False}},
+                {
+                    "maxTokens": 256,
+                    "chatTemplateKwargs": {"enable_thinking": False},
+                    "extra_body": {"reasoning_effort": "low"},
+                },
             )
 
             model_config = json.loads(result.paths.model_config_path.read_text(encoding="utf-8"))
@@ -115,6 +120,27 @@ class QuickstartTests(unittest.TestCase):
             metadata = json.loads(result.paths.metadata_path.read_text(encoding="utf-8"))
             self.assertEqual(metadata["vllm_context"], 2048)
             self.assertEqual(metadata["openclaw_route_context"], OPENCLAW_MIN_MODEL_CONTEXT)
+
+    def test_init_rejects_detected_provider_without_generator(self):
+        candidate = ProviderCandidate(
+            provider="ollama",
+            base_url="http://127.0.0.1:11434",
+            models=["llama3.1:8b"],
+            probe_results={},
+            source="port_probe",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaisesRegex(ValueError, "not supported"):
+                init_quickstart(
+                    providers="local",
+                    project_root=ROOT,
+                    bench_root=root / "bench",
+                    home=root / "home",
+                    port=19222,
+                    validate=False,
+                    detected_candidate=candidate,
+                )
 
     def test_init_refuses_to_overwrite_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -197,7 +223,7 @@ class QuickstartTests(unittest.TestCase):
             start_mock.assert_called_once_with("benchclaw", timeout_s=60)
             preflight_mock.assert_called_once()
             run_mock.assert_called_once()
-            stop_mock.assert_called_once_with("benchclaw", timeout_s=30)
+            stop_mock.assert_called_once_with("benchclaw", container=None, timeout_s=30)
             self.assertEqual(run_mock.call_args.args[0].run_id, "starter")
             self.assertEqual(preflight_mock.call_args.args[0].fixtures_root, str(Path(tmp) / "bench" / "fixtures"))
             self.assertIn("result_path=", stdout.getvalue())
