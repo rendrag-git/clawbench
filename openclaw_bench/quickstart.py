@@ -26,6 +26,7 @@ DEFAULT_VLLM_MODEL = "gpt-oss-20b-nvfp4-smoke"
 DEFAULT_VLLM_CONTEXT = 32768
 DEFAULT_VLLM_MAX_TOKENS = 256
 OPENCLAW_MIN_MODEL_CONTEXT = 16000
+OPENCLAW_CONFIG_VERSION = "2026.4.27"
 
 
 @dataclass(frozen=True)
@@ -280,8 +281,10 @@ def _selected_model_manifest(providers: str, project_root: Path, vllm: VllmEndpo
 
 def _openclaw_config(providers: str, project_root: Path, port: int, agent: str, vllm: VllmEndpoint) -> dict:
     provider_config = {}
+    plugin_entries = {}
     if providers in {"local", "both"}:
         provider_config["vllm"] = _vllm_provider_config(vllm)
+        plugin_entries["vllm"] = {"enabled": True}
     if providers in {"api", "both"}:
         provider_config["openai"] = _read_asset_json(project_root, "openclaw-config", "openai-provider.example.json")
         provider_config["anthropic"] = _read_asset_json(project_root, "openclaw-config", "anthropic-provider.example.json")
@@ -302,7 +305,7 @@ def _openclaw_config(providers: str, project_root: Path, port: int, agent: str, 
             }
         }
 
-    return {
+    config = {
         "commands": {
             "native": "auto",
             "nativeSkills": "auto",
@@ -342,7 +345,14 @@ def _openclaw_config(providers: str, project_root: Path, port: int, agent: str, 
                 }
             ],
         },
+        "meta": {
+            "lastTouchedVersion": OPENCLAW_CONFIG_VERSION,
+            "lastTouchedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        },
     }
+    if plugin_entries:
+        config["plugins"] = {"entries": plugin_entries}
+    return config
 
 
 def _default_route_model(providers: str, vllm: VllmEndpoint) -> str:

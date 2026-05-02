@@ -11,6 +11,7 @@ from openclaw_bench.cli import init_command, quickstart_command
 from openclaw_bench.preflight import PreflightCheck
 from openclaw_bench.quickstart import (
     DEFAULT_PROFILE,
+    OPENCLAW_CONFIG_VERSION,
     OPENCLAW_MIN_MODEL_CONTEXT,
     choose_safe_port,
     detect_existing_profiles,
@@ -58,6 +59,9 @@ class QuickstartTests(unittest.TestCase):
             self.assertEqual(config["models"]["providers"]["vllm"]["baseUrl"], "http://127.0.0.1:8000/v1")
             self.assertEqual(config["models"]["providers"]["vllm"]["models"][0]["id"], "gpt-oss-20b-nvfp4-smoke")
             self.assertFalse(config["models"]["providers"]["vllm"]["models"][0]["reasoning"])
+            self.assertEqual(config["plugins"]["entries"]["vllm"], {"enabled": True})
+            self.assertEqual(config["meta"]["lastTouchedVersion"], OPENCLAW_CONFIG_VERSION)
+            self.assertTrue(config["meta"]["lastTouchedAt"].endswith("Z"))
             self.assertEqual(
                 config["agents"]["defaults"]["models"]["vllm/gpt-oss-20b-nvfp4-smoke"]["params"],
                 {"maxTokens": 256, "chatTemplateKwargs": {"enable_thinking": False}},

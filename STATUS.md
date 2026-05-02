@@ -146,6 +146,12 @@ The repo needs a full local-provider setup test suite before this is considered 
   - Benchmark context tiers remain task metadata and runner filters; generated OpenClaw provider routes now use at least `16000` tokens because OpenClaw `2026.4.27` rejects smaller `modelsConfig` context windows before task execution.
   - `python3 -m unittest discover -s tests` ran `244` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-route-context-clamp-final --run-id cert-full` produced `40` attempts, `0` failures.
+- M2 generated-config metadata fix:
+  - Diagnosis: `oc-bench init --force` wrote the clamped `16000` route config, but `openclaw config validate` restored the prior `4096` last-good config because the generated file lacked OpenClaw `meta` fields. The clobbered file at `oc-stack:/root/.openclaw-benchclaw-m2/openclaw.json.clobbered.2026-05-02T01-20-23-577Z` had the expected `16000` route values.
+  - Fix: generated OpenClaw configs now include pinned `2026.4.27` metadata and the vLLM plugin entry that OpenClaw expects when promoting a config.
+  - `python3 -m unittest tests.test_quickstart` ran `9` tests.
+  - `python3 -m unittest discover -s tests` ran `244` tests.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-config-meta-fix --run-id cert-full` produced `40` attempts, `0` failures.
 
 ## Latest E2E
 
