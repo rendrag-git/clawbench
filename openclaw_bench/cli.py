@@ -8,6 +8,7 @@ from pathlib import Path
 from .certification import certify_run_dirs, render_certification_text
 from .backend import make_backend
 from .providers import ProviderCandidate, derive_probes_for_profile, run_detection
+from .providers.inherit import clone_profile, model_manifest_from_profile
 from .container import DEFAULT_GATEWAY_PORT, DEFAULT_OPENCLAW_IMAGE, ensure_openclaw_container
 from .manifest import load_model_manifest_scope, load_model_specs, load_suite
 from .models import ModelSpec
@@ -236,6 +237,16 @@ def init_command(args: argparse.Namespace) -> int:
             return 2
         detected = next((c for c in report.candidates if c.provider == "vllm"), report.candidates[0])
 
+    # Inherit path: detection found an existing OC profile with the right wiring
+    # already configured. Clone it verbatim and skip the generation flow that
+    # tripped issues #1 and #7.
+    if (
+        detected is not None
+        and detected.source == "already_known"
+        and detected.source_profile_path
+    ):
+        return _init_via_inheritance(args, detected, home)
+
     result = init_quickstart(
         providers=providers,
         project_root=PROJECT_ROOT,
@@ -267,6 +278,100 @@ def init_command(args: argparse.Namespace) -> int:
     if result.validation is not None:
         print(f"{result.validation.name}={result.validation.status} {result.validation.notes}")
     print("oauth=bring-your-own-auth; configure OAuth providers in the benchclaw profile before running them")
+    return 0
+
+
+def _init_via_inheritance(
+    args: argparse.Namespace,
+    detected: ProviderCandidate,
+    home: Path | None,
+) -> int:
+    """Clone an existing OC profile into a bench-isolated profile.
+
+    Triggered when detection found a working OC profile (source="already_known")
+    rather than a probed listening port. Bypasses the generation path entirely:
+    we copy the source profile dict verbatim and apply the bench overlay.
+    """
+    import json
+    import shutil
+    from .quickstart import (
+        DEFAULT_START_PORT,
+        OPENCLAW_CONFIG_VERSION,
+        choose_safe_port,
+        validate_benchclaw_config,
+    )
+
+    home_root = (home or Path.home()).expanduser()
+    bench_root = Path(args.bench_root).expanduser()
+
+    source_path = Path(detected.source_profile_path)  # type: ignore[arg-type]
+    if not source_path.is_file():
+        print(f"inherit failed: source profile config not found at {source_path}")
+        return 2
+    try:
+        source = json.loads(source_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"inherit failed: could not read source profile {source_path}: {exc}")
+        return 2
+
+    gateway_port = args.gateway_port or choose_safe_port(DEFAULT_START_PORT)
+
+    try:
+        bench_config = clone_profile(
+            source,
+            bench_profile=args.openclaw_profile,
+            gateway_port=gateway_port,
+            bench_agent_id=args.openclaw_agent,
+            openclaw_version=OPENCLAW_CONFIG_VERSION,
+        )
+    except ValueError as exc:
+        print(f"inherit failed: {exc}")
+        return 2
+
+    bench_dir = home_root / f".openclaw-{args.openclaw_profile}"
+    if bench_dir.exists() and not args.force:
+        print(
+            f"inherit failed: {bench_dir} already exists; pass --force to overwrite "
+            f"the isolated {args.openclaw_profile} profile"
+        )
+        return 2
+    bench_dir.mkdir(parents=True, exist_ok=True)
+    bench_config_path = bench_dir / "openclaw.json"
+    bench_config_path.write_text(
+        json.dumps(bench_config, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    manifest_dir = bench_root / "manifests"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    model_manifest = model_manifest_from_profile(source)
+    model_config_path = manifest_dir / "starter-models.json"
+    model_config_path.write_text(
+        json.dumps(model_manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    results_root = bench_root / "results"
+    workspaces_root = bench_root / "workspaces" / "quickstart"
+    fixtures_root = bench_root / "fixtures"
+    for path in (results_root, workspaces_root, fixtures_root):
+        path.mkdir(parents=True, exist_ok=True)
+
+    validation = None
+    if not args.no_validate and shutil.which("openclaw"):
+        validation = validate_benchclaw_config(args.openclaw_profile, home_root)
+        if validation.status == "fail":
+            print(f"inherit warning: {validation.name}={validation.status} {validation.notes}")
+
+    print(f"profile={args.openclaw_profile}")
+    print(f"providers={args.providers}")
+    print(f"gateway_port={gateway_port}")
+    print(f"config={bench_config_path}")
+    print(f"model_config={model_config_path}")
+    print(f"results={results_root}")
+    print(f"inherited_from={source_path}")
+    print(f"models={','.join(m['openclaw_model_name'] for m in model_manifest['models'])}")
+    print("ready")
     return 0
 
 

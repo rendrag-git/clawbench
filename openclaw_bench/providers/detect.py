@@ -16,6 +16,10 @@ class ProviderCandidate:
     models: list[str]
     probe_results: dict[str, ProbeResult]
     source: str  # "already_known" | "port_probe"
+    # Only set when source == "already_known": absolute path to the source
+    # OC profile's openclaw.json. Lets the inherit path clone the full
+    # profile config rather than regenerate it from scratch.
+    source_profile_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -247,6 +251,7 @@ def scan_existing_oc_profiles(home: Path) -> list[ProviderCandidate]:
                     models=model_ids,
                     probe_results={},
                     source="already_known",
+                    source_profile_path=str(config_path),
                 )
             )
     return candidates
