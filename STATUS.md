@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 02:04 UTC
+Last updated: 2026-05-02 03:53 UTC
 
 ## Runtime
 
@@ -179,6 +179,13 @@ The repo needs a full local-provider setup test suite before this is considered 
   - Post-fix preflight passed for `oc-stack:/tmp/oc-bench-root-m2/manifests/tier-small-needle-4k.json`.
   - Direct OpenClaw route smoke passed: `openclaw --profile benchclaw-m2 infer model run --model vllm/qwen3.5-4b --prompt "Reply with exactly: ok" --json --gateway` returned `ok`.
   - Cleanup: stopped/disabled the isolated `benchclaw-m2` gateway, then killed lingering benchmark PID `130804`; ports `19298` and `19300` are clear.
+- M3 provider-detection deployment surface slice committed:
+  - `openclaw_bench/providers/` package with `probes.py`, `detect.py`, `vllm.py` (full), and detect-only stubs for `ollama.py`, `llamacpp.py`, `lmstudio.py`
+  - `oc-bench provider-preflight` command wraps four verification gates (openclaw config validate, models list, provider health, OpenClaw route smoke)
+  - `oc-bench init` runs detection automatically; `--no-detect` keeps the env-var path; `--oc-runtime <kind:target>` for SSH/remote runtimes
+  - Probes extended to support optional auth headers and configurable probe host list; `port_probe_provider` accepts `probe_hosts` to reach services bound to non-loopback addresses; curl `--write-out` fixed to always emit `HTTP_STATUS:` on its own line regardless of whether the body ends with a newline
+  - Live integration test passes against GPT-OSS 20B via `oc-stack` (no host-vs-runtime mismatch finding)
+  - `python3 -m unittest discover -s tests` ran `287` tests (`286` + `1` skipped live test); simulator certification full run produced `40` attempts, `0` failures
 
 ## Latest E2E
 
@@ -397,3 +404,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 - Stable M2 profile direction: use one reusable isolated profile, `benchclaw-m2`, instead of creating a timestamped profile per run. Stale root-owned benchmark gateways on ports `19191`, `19193`, and `19292`-`19298` were stopped, and `benchclaw-m2` preflight now passes on port `19298`.
 - M2 4k-context blocker: generated OpenClaw routes cannot set `modelsConfig` context to `4096` under OpenClaw `2026.4.27`; the gateway requires at least `16000`. Next fix should keep the OpenClaw route context at a supported value while preserving the benchmark task/context metadata, or revise the small-tier live calibration plan to use OpenClaw-supported route contexts.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
+- M3 deployment surface for vLLM is shipped; Ollama, llama.cpp, and LM Studio remain detect-only stubs. Generators are follow-up commits gated by spinning up each runtime on the RTX Pro 5000 (or equivalent) and validating against a real instance.
+- M2 tier-small live calibration record is still open. Pick a 4-8B candidate that the new detection surface discovers (e.g., Llama 3.2 3B or Qwen3-8B via Ollama) and rerun the small-tier slice.

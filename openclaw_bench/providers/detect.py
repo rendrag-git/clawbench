@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -59,43 +60,69 @@ def _parse_models_from_body(provider: str, body: str) -> list[str]:
     return [m.get("id") for m in data if isinstance(m, dict) and isinstance(m.get("id"), str)]
 
 
+def _probe_headers_for_provider(provider: str) -> dict[str, str]:
+    """Return auth headers to include when probing the given provider.
+
+    vLLM may require an API key.  We read VLLM_API_KEY from the environment
+    (defaulting to the well-known local sentinel "vllm-local") and include it
+    as a Bearer token only when probing vLLM endpoints.  Other providers are
+    left unauthenticated.
+    """
+    if provider == "vllm":
+        key = os.environ.get("VLLM_API_KEY", "vllm-local")
+        return {"Authorization": f"Bearer {key}"}
+    return {}
+
+
 def port_probe_provider(
     provider: str,
     probes: list,
     *,
     total_timeout_s: float = 30.0,
     per_probe_timeout_s: float = 5.0,
+    probe_hosts: list[str] | None = None,
 ) -> ProviderCandidate | None:
+    """Scan well-known ports for *provider* and return the first responding candidate.
+
+    ``probe_hosts`` is the ordered list of host addresses to try for each
+    port.  It defaults to ``["127.0.0.1"]`` for purely local detection, but
+    callers may extend it with LAN/bridge addresses (e.g. ``"10.68.198.1"``)
+    to reach services that do not bind to loopback.
+    """
     endpoints = PROVIDER_ENDPOINTS.get(provider, ())
     if not endpoints:
         return None
+    if probe_hosts is None:
+        probe_hosts = ["127.0.0.1"]
+    headers = _probe_headers_for_provider(provider)
     budget_s = total_timeout_s
     for port, path in endpoints:
-        if budget_s < per_probe_timeout_s:
-            break
-        url = f"http://127.0.0.1:{port}{path}"
-        primary = probes[0]
-        t0 = time.monotonic()
-        result = primary.http_get(url, timeout_s=per_probe_timeout_s)
-        elapsed = time.monotonic() - t0
-        # Charge at least per_probe_timeout_s so mocked/fast probes still
-        # consume their allotted budget slice and the cap is enforced.
-        budget_s -= max(elapsed, per_probe_timeout_s)
-        if not result.ok:
-            continue
-        models = _parse_models_from_body(provider, result.body)
-        probe_results = {primary.name: result}
-        for extra in probes[1:]:
-            extra_result = extra.http_get(url, timeout_s=per_probe_timeout_s)
-            probe_results[extra.name] = extra_result
-        base_url = url[: -len(path)] + ("/v1" if path.startswith("/v1") else "")
-        return ProviderCandidate(
-            provider=provider,
-            base_url=base_url,
-            models=models,
-            probe_results=probe_results,
-            source="port_probe",
-        )
+        for host in probe_hosts:
+            if budget_s < per_probe_timeout_s:
+                break
+            url = f"http://{host}:{port}{path}"
+            primary = probes[0]
+            t0 = time.monotonic()
+            result = primary.http_get(url, timeout_s=per_probe_timeout_s, headers=headers)
+            elapsed = time.monotonic() - t0
+            # Charge at least per_probe_timeout_s so mocked/fast probes still
+            # consume their allotted budget slice and the cap is enforced.
+            budget_s -= max(elapsed, per_probe_timeout_s)
+            if not result.ok:
+                continue
+            models = _parse_models_from_body(provider, result.body)
+            probe_results = {primary.name: result}
+            for extra in probes[1:]:
+                extra_result = extra.http_get(url, timeout_s=per_probe_timeout_s, headers=headers)
+                probe_results[extra.name] = extra_result
+            base_url = url[: -len(path)] + ("/v1" if path.startswith("/v1") else "")
+            return ProviderCandidate(
+                provider=provider,
+                base_url=base_url,
+                models=models,
+                probe_results=probe_results,
+                source="port_probe",
+            )
     return None
 
 
@@ -105,6 +132,7 @@ def run_detection(
     probes: list,
     home: Path,
     per_provider_timeout_s: float = 30.0,
+    probe_hosts: list[str] | None = None,
 ) -> DetectionReport:
     candidates: list[ProviderCandidate] = []
     findings: list[str] = []
@@ -117,7 +145,10 @@ def run_detection(
             candidates.append(known_by_provider[provider])
             continue
         candidate = port_probe_provider(
-            provider, probes, total_timeout_s=per_provider_timeout_s
+            provider,
+            probes,
+            total_timeout_s=per_provider_timeout_s,
+            probe_hosts=probe_hosts,
         )
         if candidate is None:
             continue
