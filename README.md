@@ -14,7 +14,7 @@ The benchmark should answer:
 - Does KV-cache quantization reduce quality, latency, or concurrency enough to matter?
 - How many concurrent OpenClaw agent turns are usable on the local GPU server?
 
-Raw vLLM throughput is a diagnostic. The primary score is OpenClaw task success.
+Raw token throughput is a diagnostic. The primary score is OpenClaw task success.
 
 ## Non-Goals
 
@@ -27,12 +27,15 @@ Raw vLLM throughput is a diagnostic. The primary score is OpenClaw task success.
 
 Run two layers:
 
-1. **Serve Layer**
-   - Starts one model server per model/KV combination.
-   - Records load success, load time, VRAM use, max context, OOMs, and vLLM serving metrics.
-   - Uses the existing `bench_vllm_kv.py` style for baseline throughput.
+1. **Serve Layer** (`openclaw_bench/serve.py`)
+   - Treats each `(model, KV mode)` as one route to a model server. The bench attaches to whatever the user is already running by default; if the manifest provides a `serve_command`, the bench can start the process itself.
+   - Works against any OpenAI-compatible runtime: vLLM, llama.cpp `llama-server`, Ollama (`/api/tags` + OpenAI bridge), LM Studio, hosted OpenAI/Anthropic.
+   - Process topology depends on the runtime, not the bench:
+     - **vLLM and llama.cpp** — one process per `(model, KV mode)`. KV cache dtype is fixed at startup.
+     - **Ollama and LM Studio** — one process hosts many models; the bench discriminates by `served_model_name`. KV mode is not user-selectable in these runtimes.
+   - Records load success, load time, VRAM use, GPU utilization, max context, OOMs, request errors, and route-probe metrics (TTFT, P50/P95/P99 latency).
 
-2. **OpenClaw Layer**
+2. **OpenClaw Layer** (`openclaw_bench/backend.py`, `openclaw_bench/runner.py`)
    - Runs real `openclaw agent --json` turns against isolated benchmark workspaces.
    - Uses fixed task manifests and deterministic scoring.
    - Measures task success, file-use correctness, patch correctness, latency, tool count, and failure modes.
@@ -385,11 +388,11 @@ Pass condition:
 
 For each model/KV mode:
 
-- start server
+- attach to (or start) a server for the route
 - send one tiny agent task
 - record support or failure
 
-No full benchmark until support is known.
+No full benchmark until support is known. KV-mode probing applies only to runtimes where KV cache dtype is a startup parameter (vLLM, llama.cpp). For Ollama/LM Studio/hosted APIs, KV mode is recorded as `provider_default`.
 
 ### Phase 2: Quality Baseline
 
