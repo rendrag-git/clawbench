@@ -1,6 +1,8 @@
 import json
+import os
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from openclaw_bench.providers.detect import DetectionReport, ProviderCandidate, scan_existing_oc_profiles
@@ -256,3 +258,36 @@ class DeriveProbesForProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             derive_probes_for_profile("bench", home=Path("/tmp"), oc_runtime_override="weird")
         self.assertIn("--oc-runtime", str(cm.exception))
+
+
+class PortProbeProbeHostsTests(unittest.TestCase):
+    def test_probe_hosts_walks_each_host_until_one_succeeds(self):
+        probe = MagicMock()
+        probe.name = "host"
+        # First call (127.0.0.1) fails, second call (10.0.0.1) succeeds.
+        probe.http_get.side_effect = [_fail(), _ok(VLLM_BODY)]
+        candidate = port_probe_provider(
+            "vllm",
+            [probe],
+            total_timeout_s=30.0,
+            probe_hosts=["127.0.0.1", "10.0.0.1"],
+        )
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate.provider, "vllm")
+        # Both hosts should have been tried.
+        urls_tried = [call.args[0] for call in probe.http_get.call_args_list]
+        self.assertTrue(any("127.0.0.1" in u for u in urls_tried))
+        self.assertTrue(any("10.0.0.1" in u for u in urls_tried))
+
+
+class ProbeHeadersForProviderTests(unittest.TestCase):
+    def test_vllm_headers_pull_api_key_from_env(self):
+        from openclaw_bench.providers.detect import _probe_headers_for_provider
+        with unittest.mock.patch.dict(os.environ, {"VLLM_API_KEY": "vllm-local"}, clear=False):
+            headers = _probe_headers_for_provider("vllm")
+        self.assertEqual(headers.get("Authorization"), "Bearer vllm-local")
+
+    def test_non_vllm_provider_returns_empty_headers(self):
+        from openclaw_bench.providers.detect import _probe_headers_for_provider
+        headers = _probe_headers_for_provider("ollama")
+        self.assertEqual(headers, {})

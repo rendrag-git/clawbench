@@ -815,19 +815,45 @@ def _check_provider_models_list(
     return PreflightCheck("openclaw_models_list", "fail", _trim_output(output or "no output"))
 
 
-def _check_provider_health(base_url: str, container: str | None, timeout_s: int) -> PreflightCheck:
+def _check_provider_health(
+    base_url: str,
+    container: str | None,
+    timeout_s: int,
+    *,
+    provider: str = "vllm",
+    container_kind: str = "incus",
+) -> PreflightCheck:
+    # Lazy imports to avoid a circular-import cycle:
+    # preflight → providers.detect → providers.__init__ → providers.vllm
+    #   → quickstart → preflight
+    from .providers.detect import _probe_headers_for_provider  # noqa: PLC0415
+    from .providers.probes import DockerExecProbe, IncusExecProbe, LocalProbe  # noqa: PLC0415
+
     url = base_url.rstrip("/") + "/models"
-    if container:
-        cmd = ["incus", "exec", container, "--", "curl", "--silent", "--max-time", str(timeout_s), url]
+    if container is None:
+        probe = LocalProbe()
+    elif container_kind == "docker":
+        probe = DockerExecProbe(container)
+    elif container_kind == "incus":
+        probe = IncusExecProbe(container)
     else:
-        cmd = ["curl", "--silent", "--max-time", str(timeout_s), url]
+        return PreflightCheck(
+            "provider_health",
+            "fail",
+            f"unsupported container_kind={container_kind!r}; use incus or docker",
+        )
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s + 5)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return PreflightCheck("provider_health", "fail", str(exc))
-    if proc.returncode == 0 and proc.stdout.strip():
-        return PreflightCheck("provider_health", "pass", _trim_output(proc.stdout))
-    return PreflightCheck("provider_health", "fail", _trim_output(proc.stderr or proc.stdout or "no response"))
+        result = probe.http_get(
+            url,
+            timeout_s=timeout_s,
+            headers=_probe_headers_for_provider(provider),
+        )
+    except Exception as exc:
+        return PreflightCheck("provider_health", "fail", f"{type(exc).__name__}: {exc}")
+    if result.ok:
+        return PreflightCheck("provider_health", "pass", _trim_output(result.body))
+    detail = result.error or (f"http_{result.status_code}" if result.status_code else "no response")
+    return PreflightCheck("provider_health", "fail", _trim_output(detail))
 
 
 def run_verification_gates(
@@ -856,6 +882,7 @@ def run_verification_gates(
         base_url,
         container,
         timeout_s,
+        provider=provider,
     )
     smoke_check = _run_gate(
         "openclaw_route_smoke",

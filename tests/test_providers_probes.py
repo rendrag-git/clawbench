@@ -159,3 +159,36 @@ class SSHProbeTests(unittest.TestCase):
         self.assertEqual(cmd[0], "ssh")
         self.assertIn("ubuntu@oc-host", cmd)
         self.assertIn("curl", " ".join(cmd))
+
+
+class LocalProbeHeaderForwardingTests(unittest.TestCase):
+    def test_http_get_forwards_authorization_header(self):
+        captured = {}
+
+        class _AuthHandler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                captured["auth"] = self.headers.get("Authorization")
+                body = b'{"data":[]}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args, **_kwargs):
+                return
+
+        server = HTTPServer(("127.0.0.1", 0), _AuthHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            url = f"http://{host}:{port}/v1/models"
+            result = LocalProbe().http_get(
+                url, timeout_s=2.0, headers={"Authorization": "Bearer test-token"}
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+        self.assertTrue(result.ok)
+        self.assertEqual(captured.get("auth"), "Bearer test-token")
