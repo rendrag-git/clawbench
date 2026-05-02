@@ -10,7 +10,7 @@ from .backend import make_backend
 from .container import DEFAULT_GATEWAY_PORT, DEFAULT_OPENCLAW_IMAGE, ensure_openclaw_container
 from .manifest import load_model_manifest_scope, load_model_specs, load_suite
 from .models import ModelSpec
-from .preflight import PreflightCheck, check_openclaw_version, ensure_openclaw_gateway, render_text, run_preflight, stop_openclaw_gateway
+from .preflight import PreflightCheck, check_openclaw_version, ensure_openclaw_gateway, render_text, run_preflight, run_verification_gates, stop_openclaw_gateway
 from .quickstart import (
     DEFAULT_AGENT,
     DEFAULT_PROFILE,
@@ -69,6 +69,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Run a tiny OpenClaw agent turn that mirrors benchmark agent routing for eligible models",
     )
     preflight_parser.add_argument("--smoke-timeout", type=int, default=60, help="Seconds to wait for each smoke turn")
+    provider_preflight_parser = subparsers.add_parser(
+        "provider-preflight",
+        help="Run the four verification gates against an OpenClaw profile + provider route.",
+    )
+    provider_preflight_parser.add_argument("--profile", required=True)
+    provider_preflight_parser.add_argument("--provider", required=True, choices=["vllm", "ollama", "llamacpp", "lmstudio"])
+    provider_preflight_parser.add_argument("--base-url", required=True)
+    provider_preflight_parser.add_argument("--route-model", required=True)
+    provider_preflight_parser.add_argument("--container", default=None)
+    provider_preflight_parser.add_argument("--timeout-s", type=int, default=60)
+    provider_preflight_parser.set_defaults(handler=provider_preflight_command)
     certify_parser = subparsers.add_parser("certify", help="Audit benchmark result directories against the certification objective")
     certify_parser.add_argument("run_dirs", nargs="+", help="One or more benchmark result directories")
     certify_parser.add_argument("--json", action="store_true", help="Print machine-readable certification output")
@@ -90,6 +101,8 @@ def main(argv: list[str] | None = None) -> int:
             return stop_command(args)
         if args.command == "quickstart":
             return quickstart_command(args)
+        if args.command == "provider-preflight":
+            return provider_preflight_command(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 2
@@ -483,6 +496,21 @@ def preflight_command(args: argparse.Namespace) -> int:
         result.checks.insert(0, portability_check)
     print(result.to_json() if args.json else render_text(result))
     return 0 if result.ok else 1
+
+
+def provider_preflight_command(args: argparse.Namespace) -> int:
+    report = run_verification_gates(
+        profile=args.profile,
+        provider=args.provider,
+        base_url=args.base_url,
+        route_model=args.route_model,
+        container=args.container,
+        timeout_s=args.timeout_s,
+    )
+    for check in report.checks:
+        status = "PASS" if check.status == "pass" else "FAIL"
+        print(f"{status}\t{check.name}\t{check.notes}")
+    return 0 if report.ok else 1
 
 
 def certify_command(args: argparse.Namespace) -> int:

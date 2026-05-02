@@ -778,3 +778,94 @@ def _unlink_pid_file(path: Path) -> None:
 def _safe_path_part(value: str) -> str:
     safe = "".join(char if char.isalnum() or char in {"-", "_"} else "-" for char in value)
     return safe.strip("-") or "model"
+
+
+# ---------------------------------------------------------------------------
+# Public verification gates — provider-preflight surface
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class VerificationReport:
+    ok: bool
+    checks: tuple[PreflightCheck, ...]
+
+
+def _run_gate(name: str, runner, *args, **kwargs) -> PreflightCheck:
+    try:
+        return runner(*args, **kwargs)
+    except Exception as exc:
+        return PreflightCheck(name, "fail", f"unexpected error: {exc!r}")
+
+
+def _check_provider_models_list(
+    profile: str,
+    container: str | None,
+    provider: str,
+) -> PreflightCheck:
+    """Check that `openclaw models list --provider <provider>` returns at least one model."""
+    cmd = [*_openclaw_cmd(container), "--profile", profile, "models", "list", "--provider", provider]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return PreflightCheck("openclaw_models_list", "fail", str(exc))
+    output = f"{proc.stdout}\n{proc.stderr}".strip()
+    if proc.returncode == 0 and proc.stdout.strip():
+        return PreflightCheck("openclaw_models_list", "pass", _trim_output(proc.stdout))
+    return PreflightCheck("openclaw_models_list", "fail", _trim_output(output or "no output"))
+
+
+def _check_provider_health(base_url: str, container: str | None, timeout_s: int) -> PreflightCheck:
+    url = base_url.rstrip("/") + "/models"
+    if container:
+        cmd = ["incus", "exec", container, "--", "curl", "--silent", "--max-time", str(timeout_s), url]
+    else:
+        cmd = ["curl", "--silent", "--max-time", str(timeout_s), url]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s + 5)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return PreflightCheck("provider_health", "fail", str(exc))
+    if proc.returncode == 0 and proc.stdout.strip():
+        return PreflightCheck("provider_health", "pass", _trim_output(proc.stdout))
+    return PreflightCheck("provider_health", "fail", _trim_output(proc.stderr or proc.stdout or "no response"))
+
+
+def run_verification_gates(
+    *,
+    profile: str,
+    provider: str,
+    base_url: str,
+    route_model: str,
+    container: str | None = None,
+    home: Path | None = None,
+    timeout_s: int = 60,
+) -> VerificationReport:
+    config_check = _run_gate(
+        "openclaw_profile_config", _check_profile_config, profile, container, container is None
+    )
+    models_check = _run_gate(
+        "openclaw_models_list",
+        _check_provider_models_list,
+        profile,
+        container,
+        provider,
+    )
+    health_check = _run_gate(
+        "provider_health",
+        _check_provider_health,
+        base_url,
+        container,
+        timeout_s,
+    )
+    smoke_check = _run_gate(
+        "openclaw_route_smoke",
+        _run_openclaw_route_smoke,
+        "openclaw_route_smoke",
+        route_model,
+        profile,
+        False,
+        timeout_s,
+        container,
+    )
+    checks = (config_check, models_check, health_check, smoke_check)
+    return VerificationReport(ok=all(c.status == "pass" for c in checks), checks=checks)
