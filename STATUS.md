@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:48 UTC
+Last updated: 2026-05-02 00:57 UTC
 
 ## Runtime
 
@@ -328,4 +328,6 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 - Task-gap coverage is now present across the M2 tier manifests. Next M2 blocker: live floor/ceiling calibration records for every tier.
 - Do not treat `live-m2-small-floor-qwen35-fixed-20260502002059` as complete `tier-small` coverage; it skipped `small-workspace-needle-4k` and timed out both 32k-compatible tasks.
 - Next M2 decision: choose whether to run the missing 4096-context needle coverage for `qwen3.5-4b` as negative evidence, or move directly to a stronger small-floor candidate because the 32k slice already failed at `0.0%`.
+- Stable M2 profile direction: use one reusable isolated profile, `benchclaw-m2`, instead of creating a timestamped profile per run. Initial creation succeeded with config validation, but preflight failed because port `19298` is already occupied by stale benchmark-owned OpenClaw process `123830` from the previous timestamped run. The live 4k run has not been started.
+- Cleanup decision needed before the next live run: either stop the stale root-owned benchmark gateways on ports `19191`, `19193`, and `19292`-`19298`, or move `benchclaw-m2` to a known-free port and keep the stale processes running.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
