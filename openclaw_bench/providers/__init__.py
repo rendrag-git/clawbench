@@ -1,4 +1,10 @@
-from .detect import DetectionReport, ProviderCandidate
+from .detect import (
+    DetectionReport,
+    ProviderCandidate,
+    port_probe_provider,
+    run_detection,
+    scan_existing_oc_profiles,
+)
 from .probes import (
     DockerExecProbe,
     IncusExecProbe,
@@ -17,4 +23,7 @@ __all__ = [
     "ProbeResult",
     "ProviderCandidate",
     "SSHProbe",
+    "port_probe_provider",
+    "run_detection",
+    "scan_existing_oc_profiles",
 ]

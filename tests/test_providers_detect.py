@@ -136,3 +136,78 @@ class PortProbeProviderTests(unittest.TestCase):
             "vllm", [probe], total_timeout_s=12.0, per_probe_timeout_s=6.0
         )
         self.assertLessEqual(probe.http_get.call_count, 2)
+
+
+from openclaw_bench.providers.detect import run_detection
+
+
+class RunDetectionTests(unittest.TestCase):
+    def test_already_known_short_circuits_port_probe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            profile_dir = home / ".openclaw-bench"
+            profile_dir.mkdir()
+            (profile_dir / "openclaw.json").write_text(
+                json.dumps(
+                    {
+                        "models": {
+                            "providers": {
+                                "vllm": {
+                                    "baseUrl": "http://10.68.198.1:8000/v1",
+                                    "models": [{"id": "gpt-oss-20b"}],
+                                }
+                            }
+                        }
+                    }
+                )
+            )
+            probe = MagicMock()
+            probe.name = "host"
+            probe.http_get.return_value = _ok(VLLM_BODY)
+            report = run_detection(
+                providers=["vllm"], probes=[probe], home=home
+            )
+        self.assertEqual(len(report.candidates), 1)
+        self.assertEqual(report.candidates[0].source, "already_known")
+        probe.http_get.assert_not_called()
+
+    def test_port_probe_runs_when_nothing_already_known(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            probe = MagicMock()
+            probe.name = "host"
+            probe.http_get.return_value = _ok(VLLM_BODY)
+            report = run_detection(
+                providers=["vllm"], probes=[probe], home=home
+            )
+        self.assertEqual(len(report.candidates), 1)
+        self.assertEqual(report.candidates[0].source, "port_probe")
+        self.assertEqual(report.candidates[0].models, ["gpt-oss-20b"])
+
+    def test_zero_candidates_yields_empty_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            probe = MagicMock()
+            probe.name = "host"
+            probe.http_get.return_value = _fail()
+            report = run_detection(
+                providers=["vllm", "ollama"], probes=[probe], home=home
+            )
+        self.assertEqual(report.candidates, ())
+
+    def test_host_runtime_mismatch_emits_finding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            host = MagicMock()
+            host.name = "host"
+            host.http_get.return_value = _ok(VLLM_BODY, name="host")
+            runtime = MagicMock()
+            runtime.name = "incus:oc-stack"
+            runtime.http_get.return_value = _fail(name="incus:oc-stack")
+            report = run_detection(
+                providers=["vllm"], probes=[host, runtime], home=home
+            )
+        self.assertTrue(
+            any(f.startswith("reachable_from_host_not_runtime") for f in report.findings),
+            msg=f"findings={report.findings}",
+        )

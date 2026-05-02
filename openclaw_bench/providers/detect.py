@@ -99,6 +99,42 @@ def port_probe_provider(
     return None
 
 
+def run_detection(
+    *,
+    providers: list[str],
+    probes: list,
+    home: Path,
+    per_provider_timeout_s: float = 30.0,
+) -> DetectionReport:
+    candidates: list[ProviderCandidate] = []
+    findings: list[str] = []
+
+    already_known = scan_existing_oc_profiles(home)
+    known_by_provider = {c.provider: c for c in already_known}
+
+    for provider in providers:
+        if provider in known_by_provider:
+            candidates.append(known_by_provider[provider])
+            continue
+        candidate = port_probe_provider(
+            provider, probes, total_timeout_s=per_provider_timeout_s
+        )
+        if candidate is None:
+            continue
+        candidates.append(candidate)
+        for probe_name, result in candidate.probe_results.items():
+            if probe_name == probes[0].name:
+                continue
+            primary_ok = candidate.probe_results[probes[0].name].ok
+            if primary_ok and not result.ok:
+                findings.append(
+                    f"reachable_from_host_not_runtime:{provider}@{candidate.base_url} "
+                    f"(probe={probe_name})"
+                )
+
+    return DetectionReport(candidates=tuple(candidates), findings=tuple(findings))
+
+
 def scan_existing_oc_profiles(home: Path) -> list[ProviderCandidate]:
     home = Path(home).expanduser()
     candidates: list[ProviderCandidate] = []
