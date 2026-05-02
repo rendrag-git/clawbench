@@ -28,4 +28,7 @@ __all__ = [
     "port_probe_provider",
     "run_detection",
     "scan_existing_oc_profiles",
+    "vllm",
 ]
+
+from . import vllm  # noqa: F401
