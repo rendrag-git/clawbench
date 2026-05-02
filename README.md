@@ -56,3 +56,12 @@ docs/                  Design + operations documentation (this README is the ind
 - The simulator backend (`--backend simulator`) covers harness mechanics without live tokens. Run it before sending changes that touch scoring, workspace isolation, or report generation.
 - Tests live under `tests/`. Live tests are skipped unless `OC_BENCH_LIVE=1`.
 - `GOAL.md` is the source of truth for capabilities and acceptance. Update it before opening work that closes a gap.
+
+## Acknowledgments
+
+This project is distinct from but informed by **[openclaw/clawbench](https://github.com/openclaw/clawbench)** (MIT). That repo is the canonical OpenClaw agent benchmark — broader scope, signal-curated task selection, trace-based scoring with judge advisory, dynamical-systems diagnostics. We adopt specific methodology where it strengthens the local-runtime decision question this repo is built around:
+
+- **Multi-seed reliability metrics** (`pass^k`, worst-of-n, pass-rate, `cell_status`) — `openclaw_bench/aggregation.py`. Pattern adopted from upstream after their v4 sweep audit decomposed 40-task variance and found 47 % was seed noise. See `CLAWBENCH_V0_4_SPEC.md` in that repo for the original spec.
+- *(Planned)* Bootstrap CIs and Taguchi S/N for decision-table reporting; per-task SNR variance decomposition for tier-suite audits. Both also derive from the upstream methodology.
+
+What this repo does **not** adopt from upstream and why is recorded in the design notes — chiefly the LLM judge sidecar (this phase is machine-checkable scoring only, per [GOAL.md](GOAL.md) Build Principles) and the dynamical-systems diagnostics suite (out of scope for "is this local model usable for OC agent work").
