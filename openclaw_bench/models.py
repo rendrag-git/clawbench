@@ -152,6 +152,7 @@ class AttemptResult:
     failure_type: str | None = None
     notes: str = ""
     comparison_id: str | None = None
+    run_index: int = 0  # 0-indexed seed within (model, KV, context, concurrency, task) cell when --runs-per-task > 1
 
     def to_row(self) -> dict[str, Any]:
         return {
@@ -190,4 +191,5 @@ class AttemptResult:
             "request_errors": self.request_errors,
             "failure_type": self.failure_type,
             "notes": self.notes,
+            "run_index": self.run_index,
         }
