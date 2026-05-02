@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 01:59 UTC
+Last updated: 2026-05-02 02:04 UTC
 
 ## Runtime
 
@@ -27,14 +27,18 @@ Last updated: 2026-05-02 01:59 UTC
   - Short story smoke passed only after setting `reasoning_effort="low"`; without it, GPT-OSS spent the token budget on reasoning and returned empty/truncated visible content.
   - OpenClaw route smoke through isolated profile `benchclaw-m2-gptoss` timed out twice against the real GPT-OSS vLLM endpoint after setting `agents.defaults.models["vllm/gpt-oss-20b"].params.extra_body.reasoning_effort="low"`.
   - Follow-up diagnostic: pointed only the isolated `benchclaw-m2-gptoss` profile at a temporary fake OpenAI-compatible endpoint on `127.0.0.1:19400` and captured the outbound request. OpenClaw sent `{"max_completion_tokens":512,"reasoning_effort":"low"}` in the chat-completions payload, so the documented `extra_body` config path works. The earlier gateway debug line showing only `{"maxTokens":512}` was not evidence that `extra_body` was ignored; that log only reports stream wrapper params.
-  - Current diagnosis: the remaining timeout is downstream of request shaping, likely GPT-OSS/vLLM latency or streaming behavior under OpenClaw's route timeout envelope. Next diagnostic should replay the exact captured OpenClaw payload directly against vLLM and compare timing before changing benchmark code or config.
-  - Cleanup: stopped/disabled isolated `benchclaw-m2-gptoss` gateway processes and killed temporary proxy PID `132761`; ports `19308`, `19310`, and `19400` are clear. Restored `benchclaw-m2-gptoss` vLLM base URL to `http://10.68.198.1:8000/v1`.
+  - Root cause found: host UFW allowed `oc-stack` (`10.68.198.10`) to reach Qwen on `10.68.198.1:8003`, but not GPT-OSS on `10.68.198.1:8000`. The only existing `8000` allow rule was for `10.68.198.64`, so container requests sat in `SYN-SENT` until OpenClaw timed out.
+  - Fix applied: added narrow UFW rule allowing `10.68.198.10` on `incusbr0` to reach `10.68.198.1:8000/tcp`.
+  - Post-fix direct container health passed: `oc-stack` to `http://10.68.198.1:8000/v1/models` returned `200` with `connect=0.000156s`.
+  - Post-fix exact OpenClaw-shaped direct payload from `oc-stack` passed: `stream=true`, `max_completion_tokens=512`, `reasoning_effort="low"` returned visible `ok` with `ttfb=0.075s`, `total=0.197s`.
+  - Post-fix OpenClaw route smoke passed through isolated profile `benchclaw-m2-gptoss`: `openclaw --profile benchclaw-m2-gptoss infer model run --model vllm/gpt-oss-20b --prompt 'Reply with exactly: ok' --json --gateway` returned visible `ok`; gateway log showed prompt duration `197ms`.
+  - Cleanup: stopped isolated `benchclaw-m2-gptoss` gateway PID `133154`; ports `19308`, `19310`, and `19400` are clear. Restored `benchclaw-m2-gptoss` vLLM base URL to `http://10.68.198.1:8000/v1`.
 
 The Qwen3.5 4B service runs on GPU 0, the 16GB A4000. It uses `--enforce-eager`; without eager mode, vLLM OOMed during CUDA graph / KV-cache profiling at 32k context. GPU 1 now runs the GPT-OSS 20B MXFP4 test server on port `8000`; the previous GPU 1 embedding vLLM process was unloaded for this test.
 
-## Current Blocker
+## Current M2 State
 
-M2 larger-model calibration is blocked on GPT-OSS 20B timing/streaming under the OpenClaw route path. The model server itself is healthy at 131k context and can return visible answers when direct API requests pass `reasoning_effort="low"`. A proxy capture proved OpenClaw forwards `reasoning_effort="low"` from `params.extra_body`, so the next check is whether the exact OpenClaw-shaped chat-completions payload returns from vLLM inside the gateway timeout budget.
+M2 larger-model route smoke is unblocked for GPT-OSS 20B. The model server is healthy at 131k context, OpenClaw forwards `reasoning_effort="low"` from `params.extra_body`, container networking to host port `8000` is fixed, and isolated OpenClaw route smoke now returns `ok`. The next missing M2 evidence is a real live GPT-OSS calibration run for the appropriate medium-tier slice, with run id, commit, model id, KV mode, context, concurrency, score, and date recorded.
 
 ## Product Goal
 
