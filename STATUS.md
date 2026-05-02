@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 01:01 UTC
+Last updated: 2026-05-02 01:08 UTC
 
 ## Runtime
 
@@ -140,8 +140,34 @@ The repo needs a full local-provider setup test suite before this is considered 
   - Fixed `run_command` to stop only non-container foreground OpenClaw gateways that the harness itself started; already-running gateways are left alone.
   - `python3 -m unittest discover -s tests` ran `244` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-gateway-cleanup-fix --run-id cert-full` produced `40` attempts, `0` failures.
+- Learning log added:
+  - `LEARNINGS.md` now records durable operational findings such as the OpenClaw `16000` minimum model context, stable `benchclaw-m2` profile direction, benchmark gateway cleanup, stale port checks, and recent scoring pitfalls.
 
 ## Latest E2E
+
+M2 4k needle live run completed:
+
+- Purpose: capture the missing `small-workspace-needle-4k` evidence for `qwen3.5-4b` without rerunning the 32k-compatible small tasks.
+- Run id: `live-m2-small-needle4k-qwen35-20260502010400`
+- Code commit: `e5ef3db`
+- Runtime: `oc-stack`, OpenClaw `2026.4.27`
+- Suite: `oc-stack:/tmp/oc-bench-root-m2/manifests/tier-small-needle-4k.json`
+- Model config: `oc-stack:/tmp/oc-bench-root-m2/manifests/starter-models.json`
+- Model: `qwen3.5-4b`
+- KV mode: `provider_default`
+- Context: `4096`
+- Concurrency: `1`
+- Isolated profile: `benchclaw-m2`
+- Staged repo: `oc-stack:/tmp/openclaw-local-model-bench-m2`
+- Result directory: `oc-stack:/tmp/oc-bench-root-m2/results/live-m2-small-needle4k-qwen35-20260502010400`
+- Workspace root: `oc-stack:/tmp/oc-bench-root-m2/workspaces/live-m2-small-needle4k-qwen35-20260502010400`
+- Log: `oc-stack:/tmp/live-m2-small-needle4k-qwen35-20260502010400.log`
+- Process: completed; former PID `130157`.
+- Preflight: pass after cleanup of stale benchmark-owned root OpenClaw gateways on ports `19191`, `19193`, and `19292`-`19298`.
+- Result: `1` attempt, `1` failure, `0.0%` pass rate.
+- Failure type: `model_route_failed`; the task was not attempted.
+- Diagnosis: direct vLLM health and chat-completions probes passed, but OpenClaw route smoke failed with `Model context window too small (4096 tokens; source=modelsConfig). Minimum is 16000.`
+- Calibration status: not model-quality evidence and not a durable small-floor calibration record. The run exposed that OpenClaw `2026.4.27` cannot route a generated `4096` token model config even when the benchmark task itself is the 4k needle.
 
 M2 small-floor fixed-scorer live rerun completed:
 
@@ -331,7 +357,6 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 
 - Task-gap coverage is now present across the M2 tier manifests. Next M2 blocker: live floor/ceiling calibration records for every tier.
 - Do not treat `live-m2-small-floor-qwen35-fixed-20260502002059` as complete `tier-small` coverage; it skipped `small-workspace-needle-4k` and timed out both 32k-compatible tasks.
-- Next M2 decision: choose whether to run the missing 4096-context needle coverage for `qwen3.5-4b` as negative evidence, or move directly to a stronger small-floor candidate because the 32k slice already failed at `0.0%`.
-- Stable M2 profile direction: use one reusable isolated profile, `benchclaw-m2`, instead of creating a timestamped profile per run. Initial creation succeeded with config validation, but preflight failed because port `19298` is already occupied by stale benchmark-owned OpenClaw process `123830` from the previous timestamped run. The live 4k run has not been started.
-- Cleanup decision needed before the next live run: either stop the stale root-owned benchmark gateways on ports `19191`, `19193`, and `19292`-`19298`, or move `benchclaw-m2` to a known-free port and keep the stale processes running.
+- Stable M2 profile direction: use one reusable isolated profile, `benchclaw-m2`, instead of creating a timestamped profile per run. Stale root-owned benchmark gateways on ports `19191`, `19193`, and `19292`-`19298` were stopped, and `benchclaw-m2` preflight now passes on port `19298`.
+- M2 4k-context blocker: generated OpenClaw routes cannot set `modelsConfig` context to `4096` under OpenClaw `2026.4.27`; the gateway requires at least `16000`. Next fix should keep the OpenClaw route context at a supported value while preserving the benchmark task/context metadata, or revise the small-tier live calibration plan to use OpenClaw-supported route contexts.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
