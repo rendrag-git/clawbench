@@ -87,3 +87,75 @@ class LocalProbeHTTPErrorTests(unittest.TestCase):
         self.assertEqual(result.error, "http_404")
         self.assertEqual(json.loads(result.body), {"error": "not found"})
         self.assertEqual(result.probe_name, "host")
+
+
+import subprocess
+from unittest.mock import patch
+
+from openclaw_bench.providers.probes import (
+    DockerExecProbe,
+    IncusExecProbe,
+    SSHProbe,
+)
+
+
+class IncusExecProbeTests(unittest.TestCase):
+    def test_http_get_shells_out_to_incus_exec_curl(self):
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout='HTTP_STATUS:200\n{"object":"list","data":[]}',
+            stderr="",
+        )
+        with patch("openclaw_bench.providers.probes.subprocess.run", return_value=completed) as run:
+            result = IncusExecProbe("oc-stack").http_get(
+                "http://10.68.198.1:8000/v1/models", timeout_s=2.0
+            )
+
+        cmd = run.call_args.args[0]
+        self.assertEqual(cmd[0:4], ["incus", "exec", "oc-stack", "--"])
+        self.assertIn("curl", cmd)
+        self.assertIn("--max-time", cmd)
+        self.assertIn("2", cmd)
+        self.assertIn("http://10.68.198.1:8000/v1/models", cmd)
+        self.assertTrue(result.ok)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.probe_name, "incus:oc-stack")
+
+    def test_http_get_returns_failure_when_curl_fails(self):
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=7, stdout="", stderr="connection refused"
+        )
+        with patch("openclaw_bench.providers.probes.subprocess.run", return_value=completed):
+            result = IncusExecProbe("oc-stack").http_get(
+                "http://10.68.198.1:8000/v1/models", timeout_s=2.0
+            )
+        self.assertFalse(result.ok)
+        self.assertIsNone(result.status_code)
+        self.assertIn("connection refused", result.error or "")
+
+
+class DockerExecProbeTests(unittest.TestCase):
+    def test_http_get_shells_out_to_docker_exec_curl(self):
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout='HTTP_STATUS:200\n{"data":[]}', stderr=""
+        )
+        with patch("openclaw_bench.providers.probes.subprocess.run", return_value=completed) as run:
+            DockerExecProbe("oc").http_get("http://172.17.0.1:11434/api/tags", timeout_s=1.5)
+        cmd = run.call_args.args[0]
+        self.assertEqual(cmd[0:4], ["docker", "exec", "oc", "curl"])
+
+
+class SSHProbeTests(unittest.TestCase):
+    def test_http_get_shells_out_via_ssh(self):
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout='HTTP_STATUS:200\n{"data":[]}', stderr=""
+        )
+        with patch("openclaw_bench.providers.probes.subprocess.run", return_value=completed) as run:
+            SSHProbe("ubuntu@oc-host").http_get(
+                "http://127.0.0.1:8000/v1/models", timeout_s=3.0
+            )
+        cmd = run.call_args.args[0]
+        self.assertEqual(cmd[0], "ssh")
+        self.assertIn("ubuntu@oc-host", cmd)
+        self.assertIn("curl", " ".join(cmd))
