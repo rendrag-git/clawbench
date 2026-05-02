@@ -1,0 +1,11 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "default",
+      "object": "model",
+      "created": 1714600000,
+      "owned_by": "llamacpp"
+    }
+  ]
+}

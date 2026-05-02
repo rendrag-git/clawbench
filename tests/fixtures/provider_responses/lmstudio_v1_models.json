@@ -1,0 +1,11 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "qwen2.5-7b-instruct",
+      "object": "model",
+      "created": 1714600000,
+      "owned_by": "organization-owner"
+    }
+  ]
+}

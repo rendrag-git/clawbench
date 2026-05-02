@@ -1,0 +1,15 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "gpt-oss-20b",
+      "object": "model",
+      "created": 1714600000,
+      "owned_by": "vllm",
+      "max_model_len": 131072,
+      "permission": [],
+      "root": "gpt-oss-20b",
+      "parent": null
+    }
+  ]
+}

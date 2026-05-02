@@ -1,0 +1,28 @@
+{
+  "models": [
+    {
+      "name": "llama3.1:8b",
+      "modified_at": "2026-04-15T10:00:00Z",
+      "size": 4920753740,
+      "digest": "sha256:abc",
+      "details": {
+        "format": "gguf",
+        "family": "llama",
+        "parameter_size": "8B",
+        "quantization_level": "Q4_K_M"
+      }
+    },
+    {
+      "name": "qwen3:8b",
+      "modified_at": "2026-04-20T09:00:00Z",
+      "size": 5100000000,
+      "digest": "sha256:def",
+      "details": {
+        "format": "gguf",
+        "family": "qwen",
+        "parameter_size": "8B",
+        "quantization_level": "Q4_K_M"
+      }
+    }
+  ]
+}
