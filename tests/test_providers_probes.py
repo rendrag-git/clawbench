@@ -37,6 +37,7 @@ class LocalProbeTests(unittest.TestCase):
             result = LocalProbe().http_get(url, timeout_s=2.0)
         finally:
             server.shutdown()
+            server.server_close()
 
         self.assertIsInstance(result, ProbeResult)
         self.assertTrue(result.ok)
@@ -53,3 +54,36 @@ class LocalProbeTimeoutTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertIsNone(result.status_code)
         self.assertIsNotNone(result.error)
+
+
+class _404Handler(BaseHTTPRequestHandler):
+    def do_GET(self):  # noqa: N802
+        body = json.dumps({"error": "not found"}).encode("utf-8")
+        self.send_response(404)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_args, **_kwargs):  # silence stderr noise
+        return
+
+
+class LocalProbeHTTPErrorTests(unittest.TestCase):
+    def test_http_get_returns_failure_for_4xx_response(self):
+        server = HTTPServer(("127.0.0.1", 0), _404Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            url = f"http://{host}:{port}/v1/models"
+            result = LocalProbe().http_get(url, timeout_s=2.0)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status_code, 404)
+        self.assertEqual(result.error, "http_404")
+        self.assertEqual(json.loads(result.body), {"error": "not found"})
+        self.assertEqual(result.probe_name, "host")
