@@ -152,6 +152,11 @@ The repo needs a full local-provider setup test suite before this is considered 
   - `python3 -m unittest tests.test_quickstart` ran `9` tests.
   - `python3 -m unittest discover -s tests` ran `244` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-config-meta-fix --run-id cert-full` produced `40` attempts, `0` failures.
+  - Staged commit `3bf9ca3` into `oc-stack:/tmp/openclaw-local-model-bench-m2-3bf9ca3`.
+  - Post-fix `oc-bench init --force` preserved `contextWindow=16000` / `contextTokens=16000` in `oc-stack:/root/.openclaw-benchclaw-m2/openclaw.json`, while `starter-models.json` still records benchmark `contexts: [4096]`.
+  - Post-fix preflight passed for `oc-stack:/tmp/oc-bench-root-m2/manifests/tier-small-needle-4k.json`.
+  - Direct OpenClaw route smoke passed: `openclaw --profile benchclaw-m2 infer model run --model vllm/qwen3.5-4b --prompt "Reply with exactly: ok" --json --gateway` returned `ok`.
+  - Cleanup: stopped/disabled the isolated `benchclaw-m2` gateway, then killed lingering benchmark PID `130804`; ports `19298` and `19300` are clear.
 
 ## Latest E2E
 
@@ -252,7 +257,7 @@ Previous M2 live calibration candidate completed:
 Latest staged repo:
 
 ```text
-oc-stack:/tmp/openclaw-local-model-bench-m2-calib-20260502002059
+oc-stack:/tmp/openclaw-local-model-bench-m2-3bf9ca3
 ```
 
 Latest result directory:
