@@ -1,152 +1,153 @@
-# GOAL
+# Goal
 
-## THE Goal
+Make local-model selection for OpenClaw agent work a one-command, evidence-based decision — not guesswork, not vibes, not "I tried it for an hour and it seemed fine."
 
-Make local-model selection for OpenClaw agent work a **one-command, evidence-based decision** — not guesswork, not vibes, not "I tried it for an hour and it seemed fine."
+This is **not** a generic LLM benchmark. It does not produce chat-quality scores, leaderboards, or fluff. It answers exactly one question, with evidence: *is this local model usable for OpenClaw agent work, at what concurrency, at what context, and where does it fail?*
 
-A user with a local or LAN-reachable model server should be able to:
+## Target Outcome
 
-1. Run one command.
-2. Get a decision-quality answer to "is this model good enough for OC agent work, at what concurrency, at what context budget, and where does it fail?"
-3. Trust the answer enough to make a hardware, quantization, or model-family choice on the strength of it.
+A user with a local or LAN-reachable model server (vLLM, llama.cpp, Ollama, LM Studio, hosted OpenAI/Anthropic) runs `oc-bench quickstart`. The bench inspects what's already running, generates an OpenClaw routing config from real probes, runs the tier suite, and produces a decision-quality summary that tells them "for your hardware and use case, this model wins, this one doesn't, and here's why" — backed by per-attempt evidence rows another person can audit or reproduce.
 
-That answer must hold across the model classes people actually run — from a 4B local on a single consumer GPU up to a hosted DeepSeek/Kimi-class frontier model — and across the runtimes people actually use (vLLM, llama.cpp, Ollama, Apple Silicon).
+The answer holds across model classes (4B on a single consumer GPU up to hosted DeepSeek / Kimi-class frontier) and across the runtimes people actually use.
 
-Throughput is a diagnostic. **OpenClaw task success is the primary score.**
+## Required Capabilities
 
-## Why this matters
+Each capability has an Acceptance checklist. Items are marked complete only when verified evidence is recorded in the Progress section below (file:line, command output, run-id, artifact path, commit SHA). "Should work" claims are not evidence.
 
-Right now OC users pick local models the same way everyone picks local models: rumor, benchmark leaderboards designed for chat not agent work, and the occasional "it crashed at 16k context, oh well." That is not how a runtime that actually depends on tool-calling, multi-file reasoning, long-context retrieval, and instruction adherence should be evaluated. This repo exists so that "is this model usable for OC?" stops being a guess.
+1. **Trust hygiene — scoring is honest**
 
-## Definition of done (umbrella)
+   The scorer cannot be the source of truth if it has known false-positive or false-negative bugs. Every scoring branch has a one-line "intent" comment naming the failure mode it catches. The simulator backend produces a result for every task type that mirrors what the live backend would score.
 
-The repo is "done enough to ship as the recommended way to evaluate local models for OC" when:
+   Acceptance:
+   - [x] Workspace-discovery exact-string-match bug fixed; safelist runnability check covers `python -m unittest|pytest` + `pytest` against `tests/`.
+   - [x] Discovery path-equivalence false positive fixed; equivalent relative paths resolve under workspace before comparing.
+   - [x] Slash-prose hallucinated-path false positive fixed; only candidates with a file suffix count as references.
+   - [x] Simulator full-suite produces 40 attempts / 0 failures and matches live backend output shape.
 
-- **Anyone can run it cold.** Fresh clone → `oc-bench quickstart` → working result, with provider auto-discovery across vLLM, llama.cpp, Ollama, and Apple Silicon local runtimes.
-- **The score is trustworthy.** Scoring is machine-checkable, deterministic on the simulator backend, and free of known false-positive/negative bugs. Anchor-model calibration is recorded with date, commit, and config.
-- **Tiers discriminate.** Small/medium/large/xlarge suites each separate a documented floor model from a documented ceiling model on simulator + at least one live anchor.
-- **The hard questions get answered.** The benchmark produces a populated decision table covering single-agent coding, multi-agent background work, long-context repo search, and stress-concurrency — not just per-task scores.
-- **Concurrency and long-context sweeps produce defensible recommendations.** The decision table tells a user "at this hardware and use case, this model wins" with attempt rows behind every row. KV-quant comparison (M5) is a side investigation, not the umbrella; see M5 for why it stays deferred.
-- **Real-repo coverage exists beyond one snapshot.** Multiple real local repos with read-only and patch tasks, so synthetic fixtures aren't the only signal.
-- **Results are shareable.** A certified run produces an artifact (summary.md + summary.json + attempts.jsonl + server.json + per-attempt raw + patches) that another person can reproduce or audit.
+2. **Tiered, discriminating task suite**
 
-## Milestones
+   Four tier manifests (`tier-small`, `tier-medium`, `tier-large`, `tier-xlarge`) calibrated against a floor model (must pass) and a ceiling model (must fail). Target separation: floor ≥ 90 %, ceiling ≤ 30 %. Every behavior in the design — tool-loop discipline, tool-error recovery, destructive-action refusal, plan-then-execute coherence, cross-file consistency, AGENTS.md adherence, format-drift under length, ambiguous-spec triage, long-context needle, workspace discovery + patch — has at least one covering task in the appropriate tier.
 
-In rough priority order. Each milestone has its own definition of done; the loop should land them sequentially unless a hard blocker forces parallel work.
+   Acceptance:
+   - [x] `manifests/tier-{small,medium,large,xlarge}.json` committed, with at least one task per tier.
+   - [x] Every behavior listed above has a covering task; calibration schema validation in `openclaw_bench/calibration.py`.
+   - [ ] Live floor calibration record for tier-small (run-id, commit, model id, KV mode, context, concurrency, score, date).
+   - [ ] Live floor + ceiling records for tier-medium, tier-large, tier-xlarge.
 
-### M1. Trust hygiene — scoring is honest
+3. **Provider breadth — inspect-first, four runtimes**
 
-The bench cannot be the source of truth if its scorer has known bugs. This is the prerequisite for everything else.
+   `oc-bench init --providers local` works cold across vLLM, llama.cpp, Ollama, and LM Studio. Detection runs from where OpenClaw will route from (host or container), surfaces host-vs-runtime mismatches as a named finding, and generates a correct OpenClaw provider config per runtime — no `serve_command` for discovered external providers. Provider-specific parameter shaping (Qwen `enable_thinking=false`, GPT-OSS `reasoning_effort="low"`) is encoded.
 
-- Fix the `workspace-discovery` `test_command` exact-string-match issue (STATUS.md: latest E2E failed because the model returned a real file path instead of the canonical command). Either tighten the prompt to demand a runnable shell command, or accept any answer that passes `_test_command_runnable`. Add a regression test either way.
-- Audit `scoring.py` for other exact-match-vs-semantic-correctness traps. Document each scoring rule's intent next to the code so future task authors don't re-introduce the same class of bug.
-- Confirm simulator backend produces a result for every task type that mirrors what the live backend would score, so simulator runs are a real regression signal.
+   Acceptance:
+   - [x] Detection cascade with `LocalProbe`, `IncusExecProbe`, `DockerExecProbe`, `SSHProbe`; profile-config scan; 30 s/provider port-probe budget; host-vs-runtime mismatch finding.
+   - [x] vLLM module: detect, generate (delegates to `quickstart._vllm_provider_config`, inheriting 16 k context floor + meta + plugin entries), parameter shaping. Live test against GPT-OSS via `oc-stack` passes.
+   - [x] `oc-bench provider-preflight` wraps four gates (config validate, models list, provider health with auth-header forwarding, OpenClaw route smoke).
+   - [ ] Ollama generator implemented and validated against a live Ollama instance.
+   - [ ] llama.cpp generator implemented and validated against a live `llama-server`.
+   - [ ] LM Studio generator implemented and validated against a live LM Studio instance.
 
-### M2. Tiered, discriminating task suite
+4. **Concurrency and long-context sweeps produce real data**
 
-Four tier manifests — `tier-small`, `tier-medium`, `tier-large`, `tier-xlarge` — each calibrated against a floor model (must pass) and a ceiling model (must fail). Target separation: floor ≥ 90%, ceiling ≤ 30%.
+   For at least one anchor model per tier, the bench produces P50/P95/P99 wall time, TTFT, server errors, OOMs, and OC timeouts at concurrency 1/2/4/8/16/32/64, plus needle pass-rate by context size at 4 k / 8 k / 16 k / 32 k / 64 k. Every failure is classified — no `unknown` entries without a stderr breadcrumb.
 
-Anchor candidates:
+   Acceptance:
+   - [ ] Concurrency sweep recorded for at least one tier-small anchor.
+   - [ ] Concurrency sweep for at least one tier-medium anchor.
+   - [ ] Long-context sweep recorded across the full context grid for at least one tier-medium anchor.
+   - [ ] Failure taxonomy enforced: zero `unknown` failure types in any recorded run.
 
-| Tier | Floor | Ceiling | Character |
-|---|---|---|---|
-| small (3–8B) | Qwen3.5-4B / Llama 3.2 3B | — | Single-file, strict JSON, ≤4k ctx, ≤6 tool calls. "Usable at all?" |
-| medium (14–32B) | GPT-OSS 20B / Qwen3-32B | Qwen3.5-4B | Multi-file edits, 16–32k needle, instruction retention, tool-error recovery, AGENTS.md adherence. "Production candidate?" |
-| large (70–200B) | Llama 3.3 70B / GPT-OSS 120B | GPT-OSS 20B | Plan-then-execute, cross-file consistency, real-repo refactor, 64k needle. "Worth the VRAM?" |
-| xlarge (400B+) | DeepSeek V3.5 / Kimi K2.6 | Llama 3.3 70B | Long-session coherence, destructive-action refusal under social pressure, multi-agent delegation, 128k+ needle. "Frontier-class agent work?" |
+5. **KV-quant decision data — deferred, side investigation**
 
-Task-gap coverage required across the tier set (at least one task per behavior, in the appropriate tier):
+   KV-cache quantization (TurboQuant K8V4 / K3V4 vs FP8 vs `provider_default`) is an interesting axis that *might* affect OC agent quality on long contexts and high concurrency. It is **not** the umbrella motivating question — that lives in the Target Outcome above. M5 is a side investigation that surfaces *if* and *when* the question becomes practical to answer.
 
-- Tool-loop / stop-condition discipline (score `tool_calls ≤ N` after answer is in context).
-- Tool-error recovery (file moved/renamed; recover via grep/ls, not hallucinate).
-- Destructive-action refusal (`rm -rf`, force-push, schema drop; pass = refuse or ask).
-- Plan-then-execute coherence (plan-vs-action alignment scored).
-- Cross-file consistency (one logical change must land in two files that have to agree).
-- AGENTS.md / SOUL.md adherence (correct answer requires honoring seeded agent docs).
-- Format-drift under length (strict JSON after 10+ tool calls).
-- Ambiguous-spec triage (underspecified prompt; correct behavior is to ask, not assume).
+   Practical blockers today:
+   - Closing M5 requires side-by-side anchor-model runs at fixed weights with KV mode as the only variable, on multiple KV-mode runtime variants (vLLM TurboQuant builds, FlashInfer KV cache backends). Most setups don't have that hardware access.
+   - A defensible answer needs community-shared runs to corroborate single-machine results. The bench has no aggregation path, and no community of submitters exists.
+   - For Ollama / LM Studio / hosted APIs, KV mode is not user-selectable, so the question is moot for them.
 
-Existing `openclaw-agent-core.json` and `real-repo-readonly.example.json` stay as-is for backward compatibility; tiers are additive.
+   Acceptance: M5 stays open as a recorded gap until both the hardware-access and corroboration problems are solvable. No checkboxes — there is no path to verifiable progress here today.
 
-### M3. Provider breadth — inspect-first, four runtimes
+6. **Real-repo coverage beyond one snapshot**
 
-The provider story before this milestone was "vLLM works, the rest are aspirational." Goal: vLLM, llama.cpp, Ollama, and LM Studio (covering Apple Silicon and other consumer setups) each have a working detection path, generated config, route smoke, and a passing tier-small run.
+   `fixtures/real_repos/` includes more than the kingshot-ams-snapshot. Read-only and patch tasks are folded into the tier suites for at least one TypeScript repo, one Python repo with a non-trivial test suite, and one repo with a real bug fixture pulled from history.
 
-- Detection tests pass for each runtime (one clear endpoint, ambiguous endpoint, empty endpoint).
-- Generated OpenClaw config is correct per runtime (no `serve_command` for discovered external providers).
-- Provider-specific parameter shaping handled (Qwen thinking off when applicable, GPT-OSS `reasoning_effort="low"`, etc.).
-- `oc-bench init --providers local` survives a cold-start install on a non-NVIDIA machine.
-- Host-vs-runtime mismatches (e.g., a UFW rule that blocks the OC container from reaching a host vLLM) surface as a named finding, not a silent timeout.
+   Acceptance:
+   - [ ] At least one new real-repo fixture beyond `kingshot-ams-snapshot`.
+   - [ ] At least one tier manifest references real-repo read-only tasks.
+   - [ ] At least one tier manifest references a real-repo patch task with a `verify_command`.
 
-**Current state:** the inspect-first deployment surface is shipped, with vLLM fully implemented (detect + generate + parameter shaping) and Ollama / llama.cpp / LM Studio as detect-only stubs. The cascade, runtime auto-derive, four-gate `oc-bench provider-preflight`, and host/runtime mismatch detection are all live. Each remaining stub graduates to a real generator one runtime at a time, gated by being able to validate against a real instance.
+7. **Decision-quality reporting**
 
-### M4. Concurrency + long-context sweeps produce real data
+   `summary.md` produced by a benchmark run populates the decision table — not template, populated, with links back to the attempt rows that justify each row.
 
-Phases 3 and 4 from the README design: 1/2/4/8/16/32/64 concurrency, 4k/8k/16k/32k/64k context. Today these are outlined; the goal is producing trustworthy result tables for at least one anchor model per tier.
+   Acceptance:
+   - [ ] `summary.md` includes a decision table covering: single-agent coding, 4-agent background work, long-context repo search, high-concurrency stress.
+   - [ ] Each row names a recommended model + reason + risk, with at least one attempt-row link backing the recommendation.
+   - [ ] `summary.json` carries the same data in machine-readable form.
 
-- Concurrency sweep records P50/P95/P99 wall time, TTFT, server errors, OOMs, OC timeouts.
-- Long-context sweep produces needle pass-rate by context size with KV-mode breakdown.
-- Failure taxonomy is enforced: every failure has a classification, no `unknown` without a stderr breadcrumb.
+8. **Certification + shareable artifacts**
 
-### M5. KV-quant decision data — deferred, side investigation
+   `oc-bench certify` audits a result directory against the umbrella objective and produces a portable artifact bundle (`summary.md` + `summary.json` + `attempts.jsonl` + `server.json` + per-attempt raw + patches) that another person can reproduce or audit offline.
 
-KV-cache quantization (TurboQuant K8V4 / K3V4 vs FP8 vs `provider_default`) is an interesting axis that *might* affect OC agent quality on long contexts and high concurrency. It is **not** the umbrella motivating question — that lives in the umbrella objective above ("which local model is good enough to run for OC agent work"). M5 is a side investigation that surfaces *if* and *when* the question becomes practical to answer.
+   Acceptance:
+   - [x] Certification module exists with multi-run audit, sim-vs-live gating, hardware/throughput coverage. (50 tests in `test_certification.py`.)
+   - [ ] At least one full certified result directory exists from a live run, audited end-to-end.
+   - [ ] Bundle is self-contained (no external file references) and re-loadable on another machine.
 
-Practical blockers today:
+## Build Principles
 
-- Closing this milestone requires side-by-side anchor-model runs at fixed weights with KV mode as the only variable. That requires access to multiple KV-mode runtime variants (vLLM TurboQuant builds, FlashInfer KV cache backends) on the same hardware. Most setups don't have that.
-- Even with the hardware, a defensible answer needs community-shared runs to corroborate single-machine results — the bench currently has no upload/share path (M8 is portable artifacts, not aggregation), and no community of submitters exists.
-- For non-vLLM runtimes (Ollama, LM Studio, hosted APIs) KV mode is not user-selectable at all, so the question is moot for them.
-
-Until both the hardware-access and corroboration problems are solvable, M5 stays open as a recorded gap, not an active milestone. The primary "which model should I run" answer comes from M7 (Decision-quality reporting) fed by M2-M4 calibrations across tier suites, concurrency sweeps, and long-context sweeps — not from M5.
-
-### M6. Real-repo coverage beyond one snapshot
-
-`fixtures/real_repos/` includes more than the kingshot-ams snapshot. At minimum: one TypeScript repo, one Python repo with a non-trivial test suite, one repo with a real bug fixture from history. Read-only and patch tasks for each.
-
-### M7. Decision-quality reporting
-
-`summary.md` populates the decision table from the README:
-
-```text
-Use case | Best model/KV | Reason | Risk
-single-agent coding | ... | ... | ...
-4-agent background work | ... | ... | ...
-long-context repo search | ... | ... | ...
-high-concurrency stress | ... | ... | ...
-```
-
-Not template — populated, with links back to the attempt rows that justify each row.
-
-### M8. Certification + shareable artifacts
-
-The certification flow (`oc-bench certify`) audits a result directory against the umbrella objective and produces a portable artifact bundle. Upload/database integration is still scoped out as a separate goal, but the artifact must be self-contained and auditable offline.
-
-## Constraints
-
-- **Provider-agnostic.** No milestone may require vLLM specifically. Anything that works only against vLLM has to also have a path for llama.cpp / Ollama / Apple Silicon, even if degraded.
+- **Provider-agnostic.** Anything that works only against vLLM must have a degraded path for llama.cpp / Ollama / LM Studio / Apple Silicon, even if "degraded" means "logs a clear unsupported message."
 - **Inspect-first, ask-second UX.** The CLI never forces a user to know the exact config shape if the machine already exposes enough info to infer it.
 - **Machine-checkable scoring only** in this phase. No LLM-judge, no fuzzy semantic match. Behavior checks, file-existence checks, and `verify_command` are the bar.
-- **Simulator parity.** Every new task type must produce a deterministic simulator result so bench-mechanics regressions are caught without burning live tokens.
+- **Simulator parity.** Every new task type produces a deterministic simulator result so bench-mechanics regressions are caught without burning live tokens.
 - **Anchor calibration is durable.** Every tier ships with a calibration record (run-id, commit, model id, KV mode, context, concurrency, score, date). Recalibration is triggered by date drift, not vibes.
-- **OpenClaw `2026.4.27` is pinned.** Do not chase newer OC versions inside this goal; that is a separate decision.
-- **No production OC workspaces or sessions as test fixtures.** Ever.
+- **Pinned versions are pinned.** OpenClaw `2026.4.27`. `2026.4.29` is blocked until observed regressions resolve.
+- **No production OC workspaces or sessions as test fixtures. Ever.**
 - **Don't destroy things while debugging.** Touching shared config, killing services, or changing the host vLLM systemd unit needs explicit user confirmation.
+- **Land Required Capabilities in order with one explicit exception:** Capability 3 (deployment surface) unblocks Capability 2 (live calibrations). Trying to capture floor/ceiling records before the bench can detect and configure non-vLLM runtimes traps you in per-environment debugging every time you swap candidates.
+- **Verify before marking done.** Run the test, read the diff, confirm the output. "Should work" is not evidence.
+- **If the same fix fails twice, stop.** Write the blocker into Progress instead of trying a third variant.
+- **Challenge the goal itself if data forces it.** If a Capability turns out to be unsolvable or its question is already answered by data, record that and move on. Do not chase work the data has answered.
 
-## Out of scope for THE goal
+## Current Source Of Truth
 
-- Adding non-local provider families beyond OpenAI/Anthropic API + the four local runtimes (subscription/OAuth providers stay BYO-auth for this phase).
-- Upload/database persistence of results (M8 stops at portable artifacts).
-- Migrating off OC `2026.4.27`.
-- Fine-tuning, training, or model conversion work.
-- Building a UI on top of the bench.
+- `GOAL.md` (this file) — what we're trying to accomplish, with verifiable Acceptance per Capability.
+- `STATUS.md` — current operational state: services, endpoints, profiles, latest runs.
+- `AGENTS.md` — process rules for any agent (Codex, Claude Code, human) working in the repo.
+- `README.md` — design rationale and CLI surface. Useful background, stale-prone.
+- `manifests/*.json` — the actual benchmark contract. Treat as API surface.
+- `openclaw_bench/scoring.py` — every machine-checkable rule, with intent comments.
 
-## Notes for the loop
+Anything not listed here is reference material only unless explicitly promoted.
 
-- Land milestones in order, with one explicit exception: **the M3 deployment surface unblocks the M2 live calibrations**. Trying to capture floor/ceiling records before the bench can detect and configure non-vLLM runtimes traps you in per-environment debugging (UFW, meta-field, context-floor) every time you swap candidates. Ship the surface first; floor-model discovery falls out the side.
-- After every task, scoring change, or fixture change, run `python3 -m unittest discover -s tests` AND a simulator end-to-end. If either regresses, do not proceed.
-- Keep `STATUS.md` as **current state**, not a running log. Milestone-by-milestone commit history belongs in `git log`. STATUS should answer "what shipped, what's running, what's open" in under 100 lines.
-- When a task fails to discriminate between floor and ceiling, do not delete it — record what it actually measures and either reassign it to the right tier or repurpose it. Negative results are signal.
-- If iteration on a single task's prompt exceeds 3 rounds, stop: the task shape is probably wrong, not the wording.
-- "Done" for a milestone means the regression test exists, the simulator passes, at least one live anchor run is recorded (or, for M3, the deployment-surface live test is recorded), and `STATUS.md` reflects it. Anything less is in-progress, not done.
-- Challenge the goal itself if data forces it. If, for example, KV-quant turns out not to matter for OC quality at all, that is a finding — record it, close M5, and move on. Do not chase work that the data has already answered.
+## Progress
+
+Maintained as the canonical view of what is done, in flight, and blocked. Update before taking action on each continuation turn. Every entry includes verified evidence — file:line, artifact path, command output, commit SHA, run-id. Keep entries terse: one line each, evidence by reference.
+
+### Completed
+
+- 2026-05-02, **Capability 1 / all four items.** Scoring fixes committed in main branch history (`a9fd98b` workspace-discovery, `4013993` discovery path-equivalence, `936395b` slash-prose hallucinated-path). Simulator certification full run produces 40 attempts / 0 failures consistently; latest verification at `/tmp/openclaw-bench-m3-providers-verify` (commit `cb951f7`).
+- 2026-05-02, **Capability 2 / first two items.** Tier manifests `manifests/tier-{small,medium,large,xlarge}.json` committed; 14 tasks across 4 tiers covering all 9 design behaviors (verified against GOAL behavior list). Calibration schema validation in `openclaw_bench/calibration.py` with regression test (commit `80309c0` and follow-ups).
+- 2026-05-02, **Capability 3 / first three items.** Provider-detection deployment surface shipped across 17 commits (`5074859..129f79a`). vLLM full module at `openclaw_bench/providers/vllm.py`, detect-only stubs for Ollama/llama.cpp/LM Studio, `oc-bench provider-preflight` wraps four gates, live test against GPT-OSS via `oc-stack` passes (`tests/test_providers_live.py`, `OC_BENCH_LIVE=1`). 293 unit tests pass.
+- 2026-05-02, **Capability 8 / first item.** Certification module exists with 50 tests in `tests/test_certification.py`.
+
+### In Progress
+
+- **Bridge:** the next action feeds Capability 3 / Acceptance item "Ollama generator implemented and validated against a live Ollama instance." Output enters product state when `oc-bench init --providers local` discovers a real Ollama server and produces a route config that survives `oc-bench provider-preflight`. Until then, Ollama remains a detect-only stub.
+- 2026-05-02, no active work on master after the GOAL.md reframe + `provider-detection` slice closure. Next action: stand up Ollama on the RTX Pro 5000 (GPU 1, alongside or replacing GPT-OSS), capture its `/api/tags` response shape, write `openclaw_bench/providers/ollama.py.generate_route_config` per the OpenClaw Ollama provider docs, validate end-to-end with `oc-bench provider-preflight --provider ollama`.
+
+### Blockers / Open Questions
+
+- **Capability 2 / live tier-small floor record blocked.** Qwen3.5-4B times out (>600 s wall time) on the 32 k tier-small slice under the current vLLM setup; not a calibration record. Need a different 4–8 B candidate. Suggested path: ship the Ollama generator (Capability 3) so Llama 3.2 3B or Qwen3-8B via Ollama becomes a discoverable candidate. See latest live run `live-m2-small-floor-qwen35-fixed-20260502002059` in STATUS.md for evidence.
+- **Capability 3 / detection-driven init has silent-fallback bug.** [Issue #1](https://github.com/rendrag-git/clawbench/issues/1) — when detection finds a non-vLLM provider (e.g. Ollama), `init` silently falls back to default vLLM values rather than erroring. ~10-line fix in `openclaw_bench/cli.py` `init_command`.
+- **Capability 3 / detection probes loopback only.** [Issue #2](https://github.com/rendrag-git/clawbench/issues/2) — services bound to a bridge address (e.g. `10.68.198.1` for both Qwen and GPT-OSS in this setup) are missed by default `init`. `--probe-hosts` flag not yet exposed.
+- **OpenClaw `2026.4.29` upgrade blocked** until observed regressions diagnose. No work scheduled here.
+- **Capability 5 deferred** with practical blockers spelled out in the Capability description above. Not active work.
+
+### Iteration Log
+
+Append-only. One line per continuation turn.
+
+```
+- 2026-05-02 04:30 UTC, restructured GOAL.md to capability-and-acceptance format per codex-goal-loop template; reframed M5 as deferred side investigation (commit cb951f7); seeded Progress section with state from M3 deployment-surface slice. next: pick up Capability 3 / Ollama generator — stand up Ollama on RTX Pro 5000 and validate `oc-bench provider-preflight --provider ollama`.
+```
