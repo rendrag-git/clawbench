@@ -26,7 +26,7 @@ The repo is "done enough to ship as the recommended way to evaluate local models
 - **The score is trustworthy.** Scoring is machine-checkable, deterministic on the simulator backend, and free of known false-positive/negative bugs. Anchor-model calibration is recorded with date, commit, and config.
 - **Tiers discriminate.** Small/medium/large/xlarge suites each separate a documented floor model from a documented ceiling model on simulator + at least one live anchor.
 - **The hard questions get answered.** The benchmark produces a populated decision table covering single-agent coding, multi-agent background work, long-context repo search, and stress-concurrency — not just per-task scores.
-- **KV-quant and concurrency sweeps produce defensible recommendations.** The original motivating question (TurboQuant vs FP8 for OC) has an answer backed by data, not a TODO.
+- **Concurrency and long-context sweeps produce defensible recommendations.** The decision table tells a user "at this hardware and use case, this model wins" with attempt rows behind every row. KV-quant comparison (M5) is a side investigation, not the umbrella; see M5 for why it stays deferred.
 - **Real-repo coverage exists beyond one snapshot.** Multiple real local repos with read-only and patch tasks, so synthetic fixtures aren't the only signal.
 - **Results are shareable.** A certified run produces an artifact (summary.md + summary.json + attempts.jsonl + server.json + per-attempt raw + patches) that another person can reproduce or audit.
 
@@ -88,9 +88,17 @@ Phases 3 and 4 from the README design: 1/2/4/8/16/32/64 concurrency, 4k/8k/16k/3
 - Long-context sweep produces needle pass-rate by context size with KV-mode breakdown.
 - Failure taxonomy is enforced: every failure has a classification, no `unknown` without a stderr breadcrumb.
 
-### M5. KV-quant decision data
+### M5. KV-quant decision data — deferred, side investigation
 
-The motivating question — is TurboQuant K8V4 / K3V4 worth running for OC, or does it ruin agent quality? — has a defensible answer backed by side-by-side anchor-model runs at fixed weights with KV mode as the only variable. Documented in `docs/kv-decision.md` (or wherever) with the underlying attempt rows linked.
+KV-cache quantization (TurboQuant K8V4 / K3V4 vs FP8 vs `provider_default`) is an interesting axis that *might* affect OC agent quality on long contexts and high concurrency. It is **not** the umbrella motivating question — that lives in the umbrella objective above ("which local model is good enough to run for OC agent work"). M5 is a side investigation that surfaces *if* and *when* the question becomes practical to answer.
+
+Practical blockers today:
+
+- Closing this milestone requires side-by-side anchor-model runs at fixed weights with KV mode as the only variable. That requires access to multiple KV-mode runtime variants (vLLM TurboQuant builds, FlashInfer KV cache backends) on the same hardware. Most setups don't have that.
+- Even with the hardware, a defensible answer needs community-shared runs to corroborate single-machine results — the bench currently has no upload/share path (M8 is portable artifacts, not aggregation), and no community of submitters exists.
+- For non-vLLM runtimes (Ollama, LM Studio, hosted APIs) KV mode is not user-selectable at all, so the question is moot for them.
+
+Until both the hardware-access and corroboration problems are solvable, M5 stays open as a recorded gap, not an active milestone. The primary "which model should I run" answer comes from M7 (Decision-quality reporting) fed by M2-M4 calibrations across tier suites, concurrency sweeps, and long-context sweeps — not from M5.
 
 ### M6. Real-repo coverage beyond one snapshot
 
