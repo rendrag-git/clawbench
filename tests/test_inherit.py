@@ -6,8 +6,8 @@ from openclaw_bench.providers.inherit import clone_profile, model_manifest_from_
 def _vllm_only_source() -> dict:
     """Minimal but realistic source profile with a single vLLM provider.
 
-    Shape mirrors a real benchclaw-m2-style profile (verified against
-    /root/.openclaw-benchclaw-m2/openclaw.json on oc-stack 2026-05-02).
+    Shape mirrors a real OpenClaw profile (verified against an operator
+    profile under ~/.openclaw-<name>/openclaw.json on 2026-05-02).
     """
     return {
         "agents": {
@@ -38,7 +38,7 @@ def _vllm_only_source() -> dict:
             "ownerDisplay": "raw",
             "restart": True,
         },
-        "env": {"vars": {"VLLM_API_KEY": "vllm-local"}},
+        "env": {"vars": {"VLLM_API_KEY": "test-api-key"}},
         "gateway": {
             "auth": {"mode": "token", "token": "source-token-XYZ"},
             "bind": "loopback",
@@ -54,7 +54,7 @@ def _vllm_only_source() -> dict:
             "providers": {
                 "vllm": {
                     "api": "openai-completions",
-                    "baseUrl": "http://10.68.198.1:8003/v1",
+                    "baseUrl": "http://example.local:8003/v1",
                     "models": [
                         {
                             "contextTokens": 16000,
@@ -335,7 +335,7 @@ class ModelManifestFromProfileTests(unittest.TestCase):
         row = manifest["models"][0]
         self.assertEqual(row["model_id"], "qwen3.5-4b")
         self.assertEqual(row["openclaw_model_name"], "vllm/qwen3.5-4b")
-        self.assertEqual(row["api_base"], "http://10.68.198.1:8003/v1")
+        self.assertEqual(row["api_base"], "http://example.local:8003/v1")
         self.assertEqual(row["api_env"], "VLLM_API_KEY")
         self.assertEqual(row["contexts"], [16000])
         self.assertEqual(row["kv_modes"], ["provider_default"])

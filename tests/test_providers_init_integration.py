@@ -118,7 +118,7 @@ class InitInheritsExistingProfileTests(unittest.TestCase):
                 },
                 "list": [{"id": "main", "model": "vllm/qwen3.5-4b", "tools": {"profile": "coding"}}],
             },
-            "env": {"vars": {"VLLM_API_KEY": "vllm-local"}},
+            "env": {"vars": {"VLLM_API_KEY": "test-api-key"}},
             "gateway": {
                 "auth": {"mode": "token", "token": "source-token-XYZ"},
                 "bind": "loopback",
