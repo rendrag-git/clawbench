@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 00:08 UTC
+Last updated: 2026-05-02 00:04 UTC
 
 ## Runtime
 
@@ -130,7 +130,26 @@ The repo needs a full local-provider setup test suite before this is considered 
 
 ## Latest E2E
 
-M2 live calibration candidate completed:
+M2 small-floor live rerun in progress:
+
+- Purpose: rerun the small-tier floor candidate for `qwen3.5-4b` after the hallucinated-path scorer fix.
+- Run id: `live-m2-small-floor-qwen35-rerun-20260502000224`
+- Code commit: `936395b`
+- Runtime: `oc-stack`, OpenClaw `2026.4.27`
+- Suite: `manifests/tier-small.json`
+- Model config: `/tmp/oc-bench-root-m2-calib-20260502000224/manifests/starter-models.json`
+- Model: `qwen3.5-4b`
+- KV mode: `provider_default`
+- Context: `32768`
+- Concurrency: `1`
+- Isolated profile: `benchclaw-m2-calib-20260502000224`
+- Staged repo: `/tmp/openclaw-local-model-bench-m2-calib-20260502000224`
+- Result directory: `/tmp/oc-bench-root-m2-calib-20260502000224/results/live-m2-small-floor-qwen35-rerun-20260502000224`
+- Log: `/tmp/live-m2-small-floor-qwen35-rerun-20260502000224.log`
+- Process: parent shell PID `121009`, benchmark Python PID `121010`
+- Preflight: pass.
+
+Previous M2 live calibration candidate completed:
 
 - Purpose: small-tier floor candidate for `qwen3.5-4b`; this may also provide live discrimination evidence for later calibration analysis.
 - Run id: `live-m2-small-floor-qwen35-20260501235026`
@@ -157,13 +176,13 @@ M2 live calibration candidate completed:
 Latest staged repo:
 
 ```text
-/tmp/openclaw-local-model-bench-m1-20260501223912
+/tmp/openclaw-local-model-bench-m2-calib-20260502000224
 ```
 
 Latest result directory:
 
 ```text
-/tmp/oc-bench-root-m1-20260501223912/results/live-m1-qwen35-rerun-20260501225000
+/tmp/oc-bench-root-m2-calib-20260502000224/results/live-m2-small-floor-qwen35-rerun-20260502000224
 ```
 
 Result summary:
@@ -277,5 +296,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 ## Open Items
 
 - Task-gap coverage is now present across the M2 tier manifests. Next M2 blocker: live floor/ceiling calibration records for every tier.
-- Commit the hallucinated-path scorer fix, stage the updated repo into `oc-stack`, and rerun the small-floor live calibration candidate.
+- Poll `live-m2-small-floor-qwen35-rerun-20260502000224`; if it completes, record score/pass rate and decide whether it supports the small-floor calibration threshold.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
