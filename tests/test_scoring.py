@@ -729,6 +729,29 @@ class ScoringTests(unittest.TestCase):
             self.assertEqual(hallucinated, 0)
             self.assertIn("unexpected changed files: app/__init__.py", notes)
 
+    def test_patch_execution_does_not_treat_slash_prose_as_file_reference(self):
+        suite = load_suite(ROOT / "manifests" / "openclaw-agent-core.json")
+        task = next(item for item in suite.tasks if item.task_id == "patch-execution")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            copy_fixture(ROOT / "fixtures" / task.fixture, workspace)
+            target = workspace / "app" / "slug.py"
+            target.write_text(
+                "import re\n\n\n"
+                "def slugify(value):\n"
+                "    return re.sub(r\"[^a-zA-Z0-9]+\", \"-\", value.lower()).strip(\"-\")\n",
+                encoding="utf-8",
+            )
+            response = BackendResponse(
+                text="Updated slugify to replace non-alphanumeric characters and strip leading/trailing hyphens.",
+                json_output=None,
+                raw={},
+            )
+            score, failure, hallucinated, notes = score_task(task, workspace, response, ["app/slug.py"], True)
+            self.assertEqual(score, 1.0, notes)
+            self.assertIsNone(failure)
+            self.assertEqual(hallucinated, 0)
+
     def test_multi_file_bug_trace_fails_hidden_behavior_regression(self):
         suite = load_suite(ROOT / "manifests" / "openclaw-agent-core.json")
         task = next(item for item in suite.tasks if item.task_id == "multi-file-bug-trace")

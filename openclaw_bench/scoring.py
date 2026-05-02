@@ -629,7 +629,9 @@ def _hallucinated_paths(workspace: Path, response: BackendResponse) -> int:
 def _file_references(text: str) -> set[str]:
     refs = set()
     for match in re.finditer(r"\b[\w.-]+(?:/[\w.-]+)+\b|\b[\w.-]+\.(?:py|ts|tsx|js|json|md|toml|yaml|yml)\b", text):
-        refs.add(match.group(0).strip(".,:;()[]{}'\""))
+        candidate = match.group(0).strip(".,:;()[]{}'\"")
+        if "/" not in candidate or Path(candidate).suffix:
+            refs.add(candidate)
     return refs
 
 

@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-01 23:53 UTC
+Last updated: 2026-05-02 00:08 UTC
 
 ## Runtime
 
@@ -122,10 +122,15 @@ The repo needs a full local-provider setup test suite before this is considered 
   - `python3 -m unittest discover -s tests` ran `240` tests.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/tier-large.json --models simulated-model --kv fp8 --concurrency 1 --contexts 65536 --out /tmp/openclaw-bench-m2-plan-action --run-id tier-large` produced `3` attempts, `0` failures.
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-plan-action-cert --run-id cert-full` produced `40` attempts, `0` failures.
+- M2 hallucinated-path scorer diagnosis:
+  - Live run `live-m2-small-floor-qwen35-20260501235026` exposed a scorer false positive: prose like `leading/trailing` was counted as a nonexistent file path.
+  - Fixed by counting slash references as file references only when the candidate has a file suffix; bare prose slash pairs are ignored.
+  - `python3 -m unittest discover -s tests` ran `241` tests.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-hallucinated-path-fix --run-id cert-full` produced `40` attempts, `0` failures.
 
 ## Latest E2E
 
-M2 live calibration candidate in progress:
+M2 live calibration candidate completed:
 
 - Purpose: small-tier floor candidate for `qwen3.5-4b`; this may also provide live discrimination evidence for later calibration analysis.
 - Run id: `live-m2-small-floor-qwen35-20260501235026`
@@ -143,6 +148,11 @@ M2 live calibration candidate in progress:
 - Log: `/tmp/live-m2-small-floor-qwen35-20260501235026.log`
 - Process: parent shell PID `119185`, benchmark Python PID `119186`
 - Preflight: pass.
+- Result: `2` attempts, `2` failures, `0.0%` pass rate under commit `feb6142`.
+- Failure types:
+  - `small-workspace-discovery`: `bad_json`; the model hit output length and did not return the requested strict JSON object.
+  - `small-patch-execution`: originally scored `hallucinated_file`; diagnosis found this was a scorer false positive caused by treating `leading/trailing` prose as a path.
+- Calibration status: not a durable small-floor record. Rerun after the hallucinated-path scorer fix is committed.
 
 Latest staged repo:
 
@@ -248,6 +258,11 @@ First M2 slice in progress:
   - `plan_action_alignment` scoring enforces that final plan/executed/changed file sets match the actual patch, preserved files stay untouched, evidence files are cited, behavior checks pass, and verification passes.
   - Full unit, tier-large simulator, and certification simulator regressions pass.
   - Committed as `3643f1b`.
+- Diagnosed live small-floor candidate `live-m2-small-floor-qwen35-20260501235026`:
+  - The run completed with `2` attempts and `0.0%` recorded pass rate.
+  - `workspace_discovery` failed legitimately on strict JSON/output-length behavior.
+  - `patch_execution` exposed a scorer false positive on slash prose (`leading/trailing`), now covered by `test_patch_execution_does_not_treat_slash_prose_as_file_reference`.
+  - This run is not a calibration record; rerun small floor after committing the scorer fix.
 
 The abandoned detached quickstart rerun `live-m1-qwen35-20260501223912` stuck during gateway probing before any attempt. Its benchmark-owned temp processes were stopped; it is not the active run.
 
@@ -262,5 +277,5 @@ incus exec oc-stack -- bash -lc "cat /tmp/oc-bench-root-m1-20260501223912/result
 ## Open Items
 
 - Task-gap coverage is now present across the M2 tier manifests. Next M2 blocker: live floor/ceiling calibration records for every tier.
-- Poll `live-m2-small-floor-qwen35-20260501235026`; if it completes, record score/pass rate and convert it into the small-floor calibration record if it meets the floor threshold.
+- Commit the hallucinated-path scorer fix, stage the updated repo into `oc-stack`, and rerun the small-floor live calibration candidate.
 - The two-attempt cap was reached for the `workspace_discovery` command scorer in the M1 iteration; do not make another scoring change in that branch without a fresh diagnosis and explicit pivot.
