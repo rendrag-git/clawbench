@@ -20,6 +20,7 @@ __all__ = [
     "DockerExecProbe",
     "IncusExecProbe",
     "llamacpp",
+    "lmstudio",
     "LocalProbe",
     "ollama",
     "Probe",
@@ -36,3 +37,4 @@ __all__ = [
 from . import vllm  # noqa: F401
 from . import ollama  # noqa: F401
 from . import llamacpp  # noqa: F401
+from . import lmstudio  # noqa: F401
