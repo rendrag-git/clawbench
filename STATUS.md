@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 01:36 UTC
+Last updated: 2026-05-02 01:52 UTC
 
 ## Runtime
 
@@ -25,8 +25,14 @@ Last updated: 2026-05-02 01:36 UTC
   - Direct health passed: `/v1/models` reports `gpt-oss-20b` with `max_model_len=131072`.
   - Direct chat smoke passed with `max_tokens=128`: prompt `Reply with exactly: ok` returned visible content `ok`.
   - Short story smoke passed only after setting `reasoning_effort="low"`; without it, GPT-OSS spent the token budget on reasoning and returned empty/truncated visible content.
+  - OpenClaw route smoke through isolated profile `benchclaw-m2-gptoss` timed out twice. This is likely request-shaping/config, not model-runtime failure: direct vLLM works with `reasoning_effort="low"`, but after setting `agents.defaults.models["vllm/gpt-oss-20b"].params` to include `extra_body.reasoning_effort="low"`, the gateway log still showed only `{"maxTokens":512}` in the stream wrapper params and the route timed out. Do not try a third blind route attempt; inspect the OpenClaw vLLM/OpenAI-compatible provider parameter mapping first.
+  - Cleanup: stopped/disabled the isolated `benchclaw-m2-gptoss` gateway and killed lingering gateway PID `131977`; ports `19308` and `19310` are clear.
 
 The Qwen3.5 4B service runs on GPU 0, the 16GB A4000. It uses `--enforce-eager`; without eager mode, vLLM OOMed during CUDA graph / KV-cache profiling at 32k context. GPU 1 now runs the GPT-OSS 20B MXFP4 test server on port `8000`; the previous GPU 1 embedding vLLM process was unloaded for this test.
+
+## Current Blocker
+
+M2 larger-model calibration is blocked on OpenClaw request shaping for GPT-OSS 20B. The model server itself is healthy at 131k context and can return visible answers when direct API requests pass `reasoning_effort="low"`. The isolated OpenClaw route path still times out, and the observed gateway log suggests the configured `extra_body` parameter is not reaching the provider request in the expected form.
 
 ## Product Goal
 
