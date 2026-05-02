@@ -1,6 +1,6 @@
 import unittest
 
-from openclaw_bench.providers.inherit import clone_profile
+from openclaw_bench.providers.inherit import clone_profile, model_manifest_from_profile
 
 
 def _vllm_only_source() -> dict:
@@ -326,6 +326,40 @@ class CloneProfileSafetyTests(unittest.TestCase):
                 bench_route_model="nonexistent-provider/some-model",
             )
         self.assertIn("nonexistent-provider", str(cm.exception))
+
+
+class ModelManifestFromProfileTests(unittest.TestCase):
+    def test_vllm_only_profile_yields_one_row(self):
+        manifest = model_manifest_from_profile(_vllm_only_source())
+        self.assertEqual(len(manifest["models"]), 1)
+        row = manifest["models"][0]
+        self.assertEqual(row["model_id"], "qwen3.5-4b")
+        self.assertEqual(row["openclaw_model_name"], "vllm/qwen3.5-4b")
+        self.assertEqual(row["api_base"], "http://10.68.198.1:8003/v1")
+        self.assertEqual(row["api_env"], "VLLM_API_KEY")
+        self.assertEqual(row["contexts"], [16000])
+        self.assertEqual(row["kv_modes"], ["provider_default"])
+
+    def test_multi_provider_profile_yields_one_row_per_model(self):
+        manifest = model_manifest_from_profile(_multi_provider_source())
+        # vllm has 2 models (qwen3.5-4b + gpt-oss-20b), ollama has 1 (qwen3:8b).
+        self.assertEqual(len(manifest["models"]), 3)
+        routes = [m["openclaw_model_name"] for m in manifest["models"]]
+        self.assertIn("vllm/qwen3.5-4b", routes)
+        self.assertIn("vllm/gpt-oss-20b", routes)
+        self.assertIn("ollama/qwen3:8b", routes)
+
+    def test_provider_without_api_env_omits_field(self):
+        # Ollama in _multi_provider_source has no auth.token block.
+        manifest = model_manifest_from_profile(_multi_provider_source())
+        ollama_row = next(
+            m for m in manifest["models"] if m["openclaw_model_name"] == "ollama/qwen3:8b"
+        )
+        self.assertNotIn("api_env", ollama_row)
+
+    def test_manifest_scope_marks_inherited(self):
+        manifest = model_manifest_from_profile(_vllm_only_source())
+        self.assertEqual(manifest["manifest_scope"]["portability"], "inherited")
 
 
 if __name__ == "__main__":
