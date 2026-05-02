@@ -584,7 +584,7 @@ python3 -m openclaw_bench preflight \
   --out /home/ubuntu/openclaw-bench/results
 ```
 
-The local OpenClaw `bench` profile also needs a vLLM provider route before `--openclaw-local` task runs can use names such as `vllm/gpt-oss-20b-nvfp4-smoke`. Keep the key in the environment and configure the provider to read it as a bearer token. The repo-owned, non-secret example is `openclaw-config/vllm-provider-smoke.example.json`; it caps provider output at 256 tokens so smoke turns leave room for OpenClaw's gateway prompt and tools.
+The local OpenClaw `bench` profile also needs a vLLM provider route before `--openclaw-local` task runs can use names such as `vllm/gpt-oss-20b-nvfp4-smoke`. Keep the key in the environment and configure the provider to read it as a bearer token. The repo-owned, non-secret example is `openclaw-config/vllm-provider-smoke.example.json`; it caps provider output at 256 tokens so smoke turns leave room for OpenClaw's gateway prompt and tools. OpenClaw `2026.4.27` rejects route context windows below 16000 tokens, so benchmark manifests may still label a row as 4k/8k while the OpenClaw provider config uses a 16000-token route window.
 
 ```bash
 openclaw --profile bench config set \
@@ -596,7 +596,7 @@ openclaw --profile bench config set \
 
 Review the dry-run output first. Remove `--dry-run` only when you are ready to create or update the `bench` profile config. If you change `served_model_name` in a benchmark manifest, add the same model id/name under `models.providers.vllm.models` or OpenClaw route smoke will fail even when direct vLLM probes pass.
 
-For the isolated `oc-bench` container consuming the host Qwen3.6 vLLM endpoint at `10.68.198.1:8000`, use the repo-owned merge examples. They declare the live 8k route, cap output at 128 tokens, and disable Qwen thinking through `chatTemplateKwargs.enable_thinking=false` so OpenClaw agent turns have enough prompt/output budget for the gateway system prompt and repo tools.
+For the isolated `oc-bench` container consuming the host Qwen3.6 vLLM endpoint at `10.68.198.1:8000`, use the repo-owned merge examples. They declare the benchmark row as 8k in the manifest, use an OpenClaw-supported 16000-token provider route, cap output at 128 tokens, and disable Qwen thinking through `chatTemplateKwargs.enable_thinking=false` so OpenClaw agent turns have enough prompt/output budget for the gateway system prompt and repo tools.
 
 ```bash
 openclaw --profile bench config set \

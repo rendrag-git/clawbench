@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+OPENCLAW_MIN_MODEL_CONTEXT = 16000
 
 
 class DocumentationTests(unittest.TestCase):
@@ -103,8 +104,8 @@ class DocumentationTests(unittest.TestCase):
         for model in manifest_models:
             provider_model = provider_models[model["served_model_name"]]
             self.assertEqual(provider_model["name"], model["served_model_name"])
-            self.assertEqual(provider_model["contextWindow"], max(model["contexts"]))
-            self.assertEqual(provider_model["contextTokens"], max(model["contexts"]))
+            self.assertEqual(provider_model["contextWindow"], max(max(model["contexts"]), OPENCLAW_MIN_MODEL_CONTEXT))
+            self.assertEqual(provider_model["contextTokens"], max(max(model["contexts"]), OPENCLAW_MIN_MODEL_CONTEXT))
             self.assertEqual(provider_model["maxTokens"], 256)
 
     def test_hardware_setup_manifest_pairs_each_required_local_kv_mode(self):
@@ -136,8 +137,8 @@ class DocumentationTests(unittest.TestCase):
         self.assertTrue(provider["request"]["allowPrivateNetwork"])
         self.assertEqual(provider_model["id"], model["served_model_name"])
         self.assertEqual(provider_model["name"], model["served_model_name"])
-        self.assertEqual(provider_model["contextWindow"], max(model["contexts"]))
-        self.assertEqual(provider_model["contextTokens"], max(model["contexts"]))
+        self.assertEqual(provider_model["contextWindow"], max(max(model["contexts"]), OPENCLAW_MIN_MODEL_CONTEXT))
+        self.assertEqual(provider_model["contextTokens"], max(max(model["contexts"]), OPENCLAW_MIN_MODEL_CONTEXT))
         self.assertEqual(provider_model["maxTokens"], 128)
         self.assertFalse(provider_model["reasoning"])
         self.assertEqual(params["chatTemplateKwargs"], {"enable_thinking": False})
@@ -153,8 +154,8 @@ class DocumentationTests(unittest.TestCase):
 
         self.assertEqual(provider["baseUrl"], model["api_base"])
         self.assertEqual(provider_model["id"], model["served_model_name"])
-        self.assertEqual(provider_model["contextWindow"], max(model["contexts"]))
-        self.assertEqual(provider_model["contextTokens"], max(model["contexts"]))
+        self.assertEqual(provider_model["contextWindow"], max(max(model["contexts"]), OPENCLAW_MIN_MODEL_CONTEXT))
+        self.assertEqual(provider_model["contextTokens"], max(max(model["contexts"]), OPENCLAW_MIN_MODEL_CONTEXT))
         self.assertEqual(provider_model["maxTokens"], 32)
         self.assertIn("lean-max32", model["hardware_profile"])
         self.assertEqual(defaults["contextInjection"], "never")

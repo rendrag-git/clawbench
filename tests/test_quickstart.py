@@ -11,6 +11,7 @@ from openclaw_bench.cli import init_command, quickstart_command
 from openclaw_bench.preflight import PreflightCheck
 from openclaw_bench.quickstart import (
     DEFAULT_PROFILE,
+    OPENCLAW_MIN_MODEL_CONTEXT,
     choose_safe_port,
     detect_existing_profiles,
     init_quickstart,
@@ -93,6 +94,8 @@ class QuickstartTests(unittest.TestCase):
             provider = config["models"]["providers"]["vllm"]
             self.assertEqual(provider["baseUrl"], "http://10.68.198.1:8003/v1")
             self.assertEqual(provider["models"][0]["id"], "qwen3-vl-2b-instruct")
+            self.assertEqual(provider["models"][0]["contextWindow"], OPENCLAW_MIN_MODEL_CONTEXT)
+            self.assertEqual(provider["models"][0]["contextTokens"], OPENCLAW_MIN_MODEL_CONTEXT)
             self.assertEqual(provider["models"][0]["maxTokens"], 128)
             self.assertFalse(provider["models"][0]["reasoning"])
             self.assertEqual(config["agents"]["defaults"]["model"], "vllm/qwen3-vl-2b-instruct")
@@ -105,6 +108,9 @@ class QuickstartTests(unittest.TestCase):
             self.assertEqual(model["health_check_url"], "http://10.68.198.1:8003/v1/models")
             self.assertEqual(model["contexts"], [2048])
             self.assertNotIn("serve_command", model)
+            metadata = json.loads(result.paths.metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["vllm_context"], 2048)
+            self.assertEqual(metadata["openclaw_route_context"], OPENCLAW_MIN_MODEL_CONTEXT)
 
     def test_init_refuses_to_overwrite_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:

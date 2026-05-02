@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated: 2026-05-02 01:08 UTC
+Last updated: 2026-05-02 01:25 UTC
 
 ## Runtime
 
@@ -142,6 +142,10 @@ The repo needs a full local-provider setup test suite before this is considered 
   - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-gateway-cleanup-fix --run-id cert-full` produced `40` attempts, `0` failures.
 - Learning log added:
   - `LEARNINGS.md` now records durable operational findings such as the OpenClaw `16000` minimum model context, stable `benchclaw-m2` profile direction, benchmark gateway cleanup, stale port checks, and recent scoring pitfalls.
+- M2 OpenClaw route-context clamp fix:
+  - Benchmark context tiers remain task metadata and runner filters; generated OpenClaw provider routes now use at least `16000` tokens because OpenClaw `2026.4.27` rejects smaller `modelsConfig` context windows before task execution.
+  - `python3 -m unittest discover -s tests` ran `244` tests.
+  - `python3 -m openclaw_bench run --backend simulator --suite manifests/openclaw-certification-full.example.json --models simulated-model --kv fp8 --concurrency 1 --contexts 4096,8192,16384,32768,65536 --out /tmp/openclaw-bench-m2-route-context-clamp-final --run-id cert-full` produced `40` attempts, `0` failures.
 
 ## Latest E2E
 

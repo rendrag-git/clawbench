@@ -25,6 +25,7 @@ DEFAULT_VLLM_BASE_URL = "http://127.0.0.1:8000/v1"
 DEFAULT_VLLM_MODEL = "gpt-oss-20b-nvfp4-smoke"
 DEFAULT_VLLM_CONTEXT = 32768
 DEFAULT_VLLM_MAX_TOKENS = 256
+OPENCLAW_MIN_MODEL_CONTEXT = 16000
 
 
 @dataclass(frozen=True)
@@ -145,6 +146,7 @@ def init_quickstart(
         "vllm_base_url": vllm.base_url,
         "vllm_model": vllm.model,
         "vllm_context": vllm.context,
+        "openclaw_route_context": _openclaw_route_context(vllm.context),
         "oauth_note": "OAuth-backed providers are bring-your-own-auth for this phase; configure them in the benchclaw profile before running.",
     }
     paths.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -378,6 +380,7 @@ def _external_vllm_model(vllm: VllmEndpoint) -> dict:
 
 
 def _vllm_provider_config(vllm: VllmEndpoint) -> dict:
+    route_context = _openclaw_route_context(vllm.context)
     return {
         "baseUrl": vllm.base_url,
         "api": "openai-completions",
@@ -397,12 +400,16 @@ def _vllm_provider_config(vllm: VllmEndpoint) -> dict:
                 "id": vllm.model,
                 "name": vllm.model,
                 "reasoning": False,
-                "contextWindow": vllm.context,
-                "contextTokens": vllm.context,
+                "contextWindow": route_context,
+                "contextTokens": route_context,
                 "maxTokens": vllm.max_tokens,
             }
         ],
     }
+
+
+def _openclaw_route_context(context: int) -> int:
+    return max(context, OPENCLAW_MIN_MODEL_CONTEXT)
 
 
 def _read_json(path: Path) -> dict:

@@ -171,7 +171,12 @@ def _add_quickstart_init_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--gateway-port", type=int, help="Gateway port for the isolated benchclaw profile")
     parser.add_argument("--vllm-base-url", help="OpenAI-compatible vLLM API base URL for local-provider quickstart")
     parser.add_argument("--vllm-model", help="Served model name exposed by the vLLM API")
-    parser.add_argument("--vllm-context", type=int, default=32768, help="Context window to record for the external vLLM endpoint")
+    parser.add_argument(
+        "--vllm-context",
+        type=int,
+        default=32768,
+        help="Benchmark context window to record for the external vLLM endpoint; generated OpenClaw routes use at least 16000 tokens",
+    )
     parser.add_argument("--vllm-max-tokens", type=int, default=256, help="Max output tokens to configure for the vLLM route")
     parser.add_argument("--force", action="store_true", help="Overwrite the generated isolated benchclaw config")
     parser.add_argument("--no-validate", action="store_true", help="Write files without running openclaw config validate")

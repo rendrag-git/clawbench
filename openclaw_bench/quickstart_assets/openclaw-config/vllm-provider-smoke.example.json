@@ -16,8 +16,8 @@
     {
       "id": "gpt-oss-20b-nvfp4-smoke",
       "name": "gpt-oss-20b-nvfp4-smoke",
-      "contextWindow": 4096,
-      "contextTokens": 4096,
+      "contextWindow": 16000,
+      "contextTokens": 16000,
       "maxTokens": 256
     }
   ]
