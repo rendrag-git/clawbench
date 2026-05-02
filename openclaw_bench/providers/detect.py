@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -23,6 +24,79 @@ class DetectionReport:
 
 
 KNOWN_PROVIDERS: tuple[str, ...] = ("vllm", "ollama", "llamacpp", "lmstudio")
+
+
+PROVIDER_ENDPOINTS: dict[str, tuple[tuple[int, str], ...]] = {
+    "vllm": (
+        (8000, "/v1/models"),
+        (8001, "/v1/models"),
+        (8002, "/v1/models"),
+        (8003, "/v1/models"),
+        (8080, "/v1/models"),
+    ),
+    "llamacpp": (
+        (8080, "/v1/models"),
+        (8000, "/v1/models"),
+    ),
+    "ollama": (
+        (11434, "/api/tags"),
+    ),
+    "lmstudio": (
+        (1234, "/v1/models"),
+    ),
+}
+
+
+def _parse_models_from_body(provider: str, body: str) -> list[str]:
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return []
+    if provider == "ollama":
+        models = payload.get("models") or []
+        return [m.get("name") for m in models if isinstance(m, dict) and isinstance(m.get("name"), str)]
+    data = payload.get("data") or []
+    return [m.get("id") for m in data if isinstance(m, dict) and isinstance(m.get("id"), str)]
+
+
+def port_probe_provider(
+    provider: str,
+    probes: list,
+    *,
+    total_timeout_s: float = 30.0,
+    per_probe_timeout_s: float = 5.0,
+) -> ProviderCandidate | None:
+    endpoints = PROVIDER_ENDPOINTS.get(provider, ())
+    if not endpoints:
+        return None
+    budget_s = total_timeout_s
+    for port, path in endpoints:
+        if budget_s < per_probe_timeout_s:
+            break
+        url = f"http://127.0.0.1:{port}{path}"
+        primary = probes[0]
+        t0 = time.monotonic()
+        result = primary.http_get(url, timeout_s=per_probe_timeout_s)
+        elapsed = time.monotonic() - t0
+        # Charge at least per_probe_timeout_s so mocked/fast probes still
+        # consume their allotted budget slice and the cap is enforced.
+        budget_s -= max(elapsed, per_probe_timeout_s)
+        if not result.ok:
+            continue
+        models = _parse_models_from_body(provider, result.body)
+        probe_results = {primary.name: result}
+        for extra in probes[1:]:
+            extra_result = extra.http_get(url, timeout_s=per_probe_timeout_s)
+            probe_results[extra.name] = extra_result
+        base_url = url[: -len(path)] + ("/v1" if path.startswith("/v1") else "")
+        return ProviderCandidate(
+            provider=provider,
+            base_url=base_url,
+            models=models,
+            probe_results=probe_results,
+            source="port_probe",
+        )
+    return None
 
 
 def scan_existing_oc_profiles(home: Path) -> list[ProviderCandidate]:

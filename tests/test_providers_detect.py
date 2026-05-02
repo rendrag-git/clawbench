@@ -73,3 +73,66 @@ class ScanExistingProfilesTests(unittest.TestCase):
             )
             entries = scan_existing_oc_profiles(home)
         self.assertEqual(entries, [])
+
+
+from unittest.mock import MagicMock
+
+from openclaw_bench.providers.detect import port_probe_provider
+from openclaw_bench.providers.probes import ProbeResult
+
+
+def _ok(body: str, name: str = "host") -> ProbeResult:
+    return ProbeResult(ok=True, status_code=200, body=body, probe_name=name, error=None)
+
+
+def _fail(name: str = "host") -> ProbeResult:
+    return ProbeResult(
+        ok=False, status_code=None, body="", probe_name=name, error="connection refused"
+    )
+
+
+VLLM_BODY = '{"object":"list","data":[{"id":"gpt-oss-20b","object":"model"}]}'
+OLLAMA_BODY = '{"models":[{"name":"llama3.1:8b"}]}'
+
+
+class PortProbeProviderTests(unittest.TestCase):
+    def test_vllm_probe_returns_candidate_for_first_responding_port(self):
+        probe = MagicMock()
+        probe.name = "host"
+        probe.http_get.side_effect = [_fail(), _ok(VLLM_BODY)]
+        candidate = port_probe_provider("vllm", [probe], total_timeout_s=30.0)
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate.provider, "vllm")
+        self.assertEqual(candidate.models, ["gpt-oss-20b"])
+        self.assertEqual(candidate.source, "port_probe")
+
+    def test_ollama_probe_uses_api_tags_endpoint(self):
+        probe = MagicMock()
+        probe.name = "host"
+        probe.http_get.return_value = _ok(OLLAMA_BODY)
+        candidate = port_probe_provider("ollama", [probe], total_timeout_s=30.0)
+        url = probe.http_get.call_args.args[0]
+        self.assertIn("/api/tags", url)
+        self.assertIsNotNone(candidate)
+        self.assertIn("llama3.1:8b", candidate.models)
+
+    def test_returns_none_when_all_ports_fail(self):
+        probe = MagicMock()
+        probe.name = "host"
+        probe.http_get.return_value = _fail()
+        candidate = port_probe_provider("vllm", [probe], total_timeout_s=30.0)
+        self.assertIsNone(candidate)
+
+    def test_total_budget_caps_probe_count(self):
+        # Each probe takes 6s of fake budget; with 12s total we should call at most twice.
+        probe = MagicMock()
+        probe.name = "host"
+
+        def slow(*_args, **_kwargs):
+            return _fail()
+
+        probe.http_get.side_effect = slow
+        port_probe_provider(
+            "vllm", [probe], total_timeout_s=12.0, per_probe_timeout_s=6.0
+        )
+        self.assertLessEqual(probe.http_get.call_count, 2)
