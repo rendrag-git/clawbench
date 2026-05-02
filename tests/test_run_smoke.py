@@ -291,6 +291,64 @@ class RunSmokeTests(unittest.TestCase):
             attempt = json.loads((run_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()[0])
             self.assertEqual(attempt["hardware_profile"], "default")
 
+    def test_simulator_run_with_runs_per_task_emits_reliability(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "results"
+            cmd = [
+                sys.executable,
+                "-m",
+                "openclaw_bench",
+                "run",
+                "--backend",
+                "simulator",
+                "--suite",
+                str(ROOT / "manifests" / "openclaw-agent-core.json"),
+                "--models",
+                "simulated-model",
+                "--kv",
+                "fp8",
+                "--concurrency",
+                "1",
+                "--contexts",
+                "4096",
+                "--runs-per-task",
+                "3",
+                "--out",
+                str(out),
+                "--run-id",
+                "test-multi-seed",
+            ]
+            proc = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, check=False)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            run_dir = out / "test-multi-seed"
+
+            config = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["runs_per_task"], 3)
+
+            attempts = [
+                json.loads(line)
+                for line in (run_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            # 5 tasks survive the 4096 context filter in agent-core; with 3 seeds each, 15 attempts.
+            self.assertEqual(len(attempts), 15)
+            run_indices = sorted({row["run_index"] for row in attempts})
+            self.assertEqual(run_indices, [0, 1, 2])
+
+            summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+            self.assertIn("reliability", summary)
+            cells = summary["reliability"]["cells"]
+            # 5 cells (one per task) given simulator constancy across seeds.
+            self.assertEqual(len(cells), 5)
+            for cell in cells:
+                self.assertEqual(cell["n"], 3)
+                # Simulator is deterministic per task, so every cell is either all_pass or all_fail.
+                self.assertIn(cell["cell_status"], {"all_pass", "all_fail"})
+
+            self.assertTrue((run_dir / "reliability.jsonl").exists())
+            md = (run_dir / "summary.md").read_text(encoding="utf-8")
+            self.assertIn("Reliability (multi-seed)", md)
+            self.assertIn("Mean pass^k", md)
+
     def test_real_repo_readonly_simulator_run_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "results"

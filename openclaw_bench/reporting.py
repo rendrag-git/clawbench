@@ -4,6 +4,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+from .aggregation import aggregate_attempts, summarize_reliability
 from .models import AttemptResult
 
 
@@ -20,6 +21,19 @@ def write_reports(out_dir: Path, results: list[AttemptResult], server: dict) -> 
     write_jsonl(out_dir / "failures.jsonl", [row for row in rows if row["status"] != "pass"])
     (out_dir / "server.json").write_text(json.dumps(server, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     summary = summarize(results)
+    reliability_cells = aggregate_attempts(rows)
+    if any(c.n > 1 for c in reliability_cells):
+        # Only emit reliability metrics when at least one cell has multiple seeds.
+        # Single-run runs keep the existing summary shape unchanged.
+        cell_rows = [c.to_row() for c in reliability_cells]
+        write_jsonl(out_dir / "reliability.jsonl", cell_rows)
+        summary["reliability"] = {
+            "cells": cell_rows,
+            "by_model": [
+                {"model": model, "kv_cache_dtype": kv, **stats}
+                for (model, kv), stats in summarize_reliability(reliability_cells).items()
+            ],
+        }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     (out_dir / "summary.md").write_text(render_summary_md(summary), encoding="utf-8")
 
@@ -147,6 +161,21 @@ def render_summary_md(summary: dict) -> str:
     lines.extend(["", "## Decision Table", "", "| Use case | Best model/KV | Reason | Risk |", "| --- | --- | --- | --- |"])
     for row in summary["decision_table"]:
         lines.append(f"| {row['use_case']} | {row['best_model_kv']} | {row['reason']} | {row['risk']} |")
+    reliability = summary.get("reliability")
+    if reliability:
+        lines.extend([
+            "",
+            "## Reliability (multi-seed)",
+            "",
+            "Per (model, KV) cell roll-up. `pass^k` = 1.0 means every seed of every cell passed; lower means at least one cell had a flaky or all-fail seed pattern. `worst-of-n` is the floor a user would actually feel.",
+            "",
+            "| Model | KV | Cells | All-pass | Flaky | All-fail | Load failed | Mean pass^k | Mean worst-of-n | Mean pass-rate |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ])
+        for row in reliability["by_model"]:
+            lines.append(
+                "| {model} | {kv_cache_dtype} | {n_cells} | {n_all_pass} | {n_flaky} | {n_all_fail} | {n_load_failed} | {mean_pass_k:.3f} | {mean_worst_of_n:.3f} | {mean_pass_rate:.3f} |".format(**row)
+            )
     return "\n".join(lines) + "\n"
 
 
