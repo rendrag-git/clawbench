@@ -24,7 +24,7 @@ class RunSmokeTests(unittest.TestCase):
     def setUp(self):
         self.version_patcher = patch(
             "openclaw_bench.cli.check_openclaw_version",
-            return_value=PreflightCheck("openclaw_version", "pass", "OpenClaw 2026.4.27 matches pinned version 2026.4.27"),
+            return_value=PreflightCheck("openclaw_version", "pass", "OpenClaw 2026.4.27"),
         )
         self.version_patcher.start()
 
@@ -1230,7 +1230,7 @@ def _run_args(**overrides):
         "openclaw_local": False,
         "openclaw_container": "oc-bench-gateway",
         "ensure_openclaw_container": True,
-        "openclaw_container_image": "clawdaddy/openclaw:business-smoke-2026.4.27",
+        "openclaw_container_image": "clawdaddy/openclaw:business-smoke-latest",
         "openclaw_container_home": None,
         "openclaw_container_gateway_port": 19091,
         "openclaw_container_token": None,

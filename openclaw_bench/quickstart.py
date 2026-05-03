@@ -26,7 +26,9 @@ DEFAULT_VLLM_MODEL = "gpt-oss-20b-nvfp4-smoke"
 DEFAULT_VLLM_CONTEXT = 32768
 DEFAULT_VLLM_MAX_TOKENS = 256
 OPENCLAW_MIN_MODEL_CONTEXT = 16000
-OPENCLAW_CONFIG_VERSION = "2026.4.27"
+def _openclaw_config_version() -> str:
+    from .preflight import detect_openclaw_version
+    return detect_openclaw_version() or "unknown"
 
 
 @dataclass(frozen=True)
@@ -355,7 +357,7 @@ def _openclaw_config(providers: str, project_root: Path, port: int, agent: str, 
             ],
         },
         "meta": {
-            "lastTouchedVersion": OPENCLAW_CONFIG_VERSION,
+            "lastTouchedVersion": _openclaw_config_version(),
             "lastTouchedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         },
     }

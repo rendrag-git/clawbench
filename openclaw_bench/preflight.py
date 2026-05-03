@@ -16,8 +16,6 @@ from .models import ModelSpec, SuiteManifest, TaskSpec
 from .workspace import OPENCLAW_SEED_FILES, copy_fixture, seed_openclaw_workspace_files
 
 
-OPENCLAW_PINNED_VERSION = "2026.4.27"
-OPENCLAW_BLOCKED_VERSION = "2026.4.29"
 
 
 @dataclass
@@ -397,28 +395,30 @@ def _check_container_config(profile: str, container: str) -> PreflightCheck:
 
 
 def check_openclaw_version(container: str | None = None) -> PreflightCheck:
+    version = detect_openclaw_version(container)
+    if version is None:
+        cmd = [*_openclaw_cmd(container), "--version"]
+        try:
+            proc = subprocess.run(cmd, text=True, capture_output=True, timeout=10, check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return PreflightCheck("openclaw_version", "fail", str(exc))
+        output = f"{proc.stdout}\n{proc.stderr}".strip()
+        if proc.returncode != 0:
+            return PreflightCheck("openclaw_version", "fail", _trim_output(output))
+        return PreflightCheck("openclaw_version", "fail", f"could not parse OpenClaw version from: {_trim_output(output)}")
+    return PreflightCheck("openclaw_version", "pass", f"OpenClaw {version}")
+
+
+def detect_openclaw_version(container: str | None = None) -> str | None:
+    """Return the installed OpenClaw version string, or None if unavailable."""
     cmd = [*_openclaw_cmd(container), "--version"]
     try:
         proc = subprocess.run(cmd, text=True, capture_output=True, timeout=10, check=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return PreflightCheck("openclaw_version", "fail", str(exc))
-    output = f"{proc.stdout}\n{proc.stderr}".strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
     if proc.returncode != 0:
-        return PreflightCheck("openclaw_version", "fail", _trim_output(output))
-    version = _parse_openclaw_version(output)
-    if version is None:
-        return PreflightCheck("openclaw_version", "fail", f"could not parse OpenClaw version from: {_trim_output(output)}")
-    if version != OPENCLAW_PINNED_VERSION:
-        return PreflightCheck(
-            "openclaw_version",
-            "fail",
-            (
-                f"OpenClaw {version} does not match pinned version {OPENCLAW_PINNED_VERSION}; "
-                f"{OPENCLAW_BLOCKED_VERSION} is currently blocked for bench runs. "
-                f"Use npm install -g openclaw@{OPENCLAW_PINNED_VERSION}."
-            ),
-        )
-    return PreflightCheck("openclaw_version", "pass", f"OpenClaw {version} matches pinned version {OPENCLAW_PINNED_VERSION}")
+        return None
+    return _parse_openclaw_version(f"{proc.stdout}\n{proc.stderr}")
 
 
 def _parse_openclaw_version(output: str) -> str | None:

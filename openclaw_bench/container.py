@@ -9,7 +9,7 @@ from pathlib import Path
 from .models import ModelSpec
 
 
-DEFAULT_OPENCLAW_IMAGE = "clawdaddy/openclaw:business-smoke-2026.4.27"
+DEFAULT_OPENCLAW_IMAGE = "clawdaddy/openclaw:business-smoke-latest"
 DEFAULT_GATEWAY_TOKEN = "oc-bench-token"
 DEFAULT_GATEWAY_PORT = 19091
 

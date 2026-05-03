@@ -54,14 +54,13 @@ Each concurrent worker gets a separate workspace copy so code-edit tasks do not 
 
 Fresh clones do not need a separate manual gateway start before the first benchmark. After installing the repo, `oc-bench` and `openclaw-bench` are equivalent entrypoints. For non-local OpenClaw runs, `oc-bench run` and `oc-bench preflight` ensure the selected `--openclaw-profile` gateway by default, using `openclaw --profile bench gateway --dev --verbose run` as a detached foreground gateway when the gateway is not already reachable, then polling readiness for up to `--openclaw-gateway-timeout` seconds. Gateway runs also default to configured benchmark workspace agents so model routing is bound on the agent instead of sent as an unauthorized per-call override. Use `--no-ensure-openclaw-gateway` only when a supervisor or container entrypoint already owns gateway lifecycle.
 
-OpenClaw is pinned to `2026.4.27` for this harness. `2026.4.29` is blocked for benchmark runs until the regressions are resolved:
+The harness is not pinned to a specific OpenClaw version. It runs against whatever version is installed (host, container, or runtime target). Check your version with:
 
 ```bash
-npm install -g openclaw@2026.4.27
 openclaw --version
 ```
 
-For isolated Docker runs, pass `--openclaw-container oc-bench-gateway`. On first use, `oc-bench` creates or starts that container with image `clawdaddy/openclaw:business-smoke-2026.4.27`, host networking, a separate home at `<bench-root>/container-home`, and exact-path mounts for the repo, benchmark root, and any custom workspace root. The container stays as a reusable OpenClaw runtime; the harness still starts/checks the selected `bench` gateway through `openclaw --profile bench gateway status` and a detached verbose foreground gateway when needed. This path is intentionally separate from any host or LXC OpenClaw install. Use `--no-ensure-openclaw-container` only when another supervisor already owns the container.
+For isolated Docker runs, pass `--openclaw-container oc-bench-gateway`. On first use, `oc-bench` creates or starts that container with image `clawdaddy/openclaw:business-smoke-latest`, host networking, a separate home at `<bench-root>/container-home`, and exact-path mounts for the repo, benchmark root, and any custom workspace root. The container stays as a reusable OpenClaw runtime; the harness still starts/checks the selected `bench` gateway through `openclaw --profile bench gateway status` and a detached verbose foreground gateway when needed. This path is intentionally separate from any host or LXC OpenClaw install. Use `--no-ensure-openclaw-container` only when another supervisor already owns the container.
 
 ## Task Suite
 

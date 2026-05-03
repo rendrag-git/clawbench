@@ -95,12 +95,10 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("preflight` can emit a warning", doc)
         self.assertIn("at least two local hardware/setup profiles", doc)
 
-    def test_benchmark_shape_doc_covers_isolation_and_pinning(self):
+    def test_benchmark_shape_doc_covers_isolation(self):
         doc = (ROOT / "docs" / "design" / "benchmark-shape.md").read_text(encoding="utf-8")
 
-        self.assertIn("npm install -g openclaw@2026.4.27", doc)
-        self.assertIn("2026.4.29` is blocked", doc)
-        self.assertIn("clawdaddy/openclaw:business-smoke-2026.4.27", doc)
+        self.assertIn("clawdaddy/openclaw:business-smoke-latest", doc)
         self.assertIn("--no-ensure-openclaw-gateway", doc)
         self.assertIn("--no-ensure-openclaw-container", doc)
         self.assertIn("exact-path mounts for the repo, benchmark root, and any custom workspace root", doc)

@@ -294,9 +294,9 @@ def _init_via_inheritance(
     """
     import json
     import shutil
+    from .preflight import detect_openclaw_version
     from .quickstart import (
         DEFAULT_START_PORT,
-        OPENCLAW_CONFIG_VERSION,
         choose_safe_port,
         validate_benchclaw_config,
     )
@@ -338,7 +338,7 @@ def _init_via_inheritance(
             gateway_port=gateway_port,
             bench_agent_id=args.openclaw_agent,
             bench_route_model=bench_route_model,
-            openclaw_version=OPENCLAW_CONFIG_VERSION,
+            openclaw_version=detect_openclaw_version() or "unknown",
         )
     except ValueError as exc:
         print(f"inherit failed: {exc}")

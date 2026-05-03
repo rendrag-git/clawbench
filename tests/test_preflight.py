@@ -9,7 +9,6 @@ from unittest.mock import patch
 from openclaw_bench.manifest import load_suite
 from openclaw_bench.models import BackendResponse, ModelSpec
 from openclaw_bench.preflight import (
-    OPENCLAW_PINNED_VERSION,
     _check_gateway,
     check_openclaw_version,
     ensure_openclaw_gateway,
@@ -920,22 +919,22 @@ class PreflightTests(unittest.TestCase):
 
 
 class OpenClawVersionTests(unittest.TestCase):
-    def test_pinned_openclaw_version_passes(self):
-        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=f"OpenClaw {OPENCLAW_PINNED_VERSION} (abc123)\n", stderr="")
-        with patch("subprocess.run", return_value=completed):
-            check = check_openclaw_version()
-        self.assertEqual(check.status, "pass")
+    def test_any_parseable_version_passes(self):
+        for version in ("2026.4.26", "2026.4.27", "2026.4.29", "2026.5.1"):
+            completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=f"OpenClaw {version} (abc123)\n", stderr="")
+            with patch("subprocess.run", return_value=completed):
+                check = check_openclaw_version()
+            self.assertEqual(check.status, "pass", msg=f"version {version} should pass")
+            self.assertIn(version, check.notes)
 
-    def test_openclaw_429_is_blocked(self):
-        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="OpenClaw 2026.4.29 (abc123)\n", stderr="")
+    def test_unparseable_version_fails(self):
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="not a version string\n", stderr="")
         with patch("subprocess.run", return_value=completed):
             check = check_openclaw_version()
         self.assertEqual(check.status, "fail")
-        self.assertIn("2026.4.27", check.notes)
-        self.assertIn("2026.4.29", check.notes)
 
 
-def _version_check(status: str = "pass", notes: str = "OpenClaw 2026.4.27 matches pinned version 2026.4.27"):
+def _version_check(status: str = "pass", notes: str = "OpenClaw 2026.4.27"):
     from openclaw_bench.preflight import PreflightCheck
 
     return PreflightCheck("openclaw_version", status, notes)

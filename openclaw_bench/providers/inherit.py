@@ -47,7 +47,7 @@ def clone_profile(
     gateway_token: str | None = None,
     bench_agent_id: str = "bench",
     bench_route_model: str | None = None,
-    openclaw_version: str = "2026.4.27",
+    openclaw_version: str = "unknown",
     last_touched_at: str | None = None,
 ) -> dict:
     """Return a deep clone of `source` with bench-specific overlays applied.

@@ -16,7 +16,7 @@ class ContainerEnsureTests(unittest.TestCase):
             with patch("subprocess.run", return_value=completed) as run_mock:
                 result = ensure_openclaw_container(
                     container="oc-bench-gateway",
-                    image="clawdaddy/openclaw:business-smoke-2026.4.27",
+                    image="clawdaddy/openclaw:business-smoke-latest",
                     profile="bench",
                     project_root=Path(tmp) / "repo",
                     bench_root=Path(tmp) / "bench",
@@ -34,7 +34,7 @@ class ContainerEnsureTests(unittest.TestCase):
             with patch("subprocess.run", side_effect=[inspect, started]) as run_mock:
                 result = ensure_openclaw_container(
                     container="oc-bench-gateway",
-                    image="clawdaddy/openclaw:business-smoke-2026.4.27",
+                    image="clawdaddy/openclaw:business-smoke-latest",
                     profile="bench",
                     project_root=Path(tmp) / "repo",
                     bench_root=Path(tmp) / "bench",
@@ -53,7 +53,7 @@ class ContainerEnsureTests(unittest.TestCase):
                 with patch("subprocess.run", side_effect=[inspect, created]) as run_mock:
                     result = ensure_openclaw_container(
                         container="oc-bench-gateway",
-                        image="clawdaddy/openclaw:business-smoke-2026.4.27",
+                        image="clawdaddy/openclaw:business-smoke-latest",
                         profile="bench",
                         project_root=root / "repo",
                         bench_root=root / "bench",
@@ -72,7 +72,7 @@ class ContainerEnsureTests(unittest.TestCase):
         self.assertIn("-e", cmd)
         self.assertIn("OPENAI_API_KEY=test-openai", cmd)
         self.assertIn("VLLM_API_KEY=vllm-local", cmd)
-        self.assertIn("clawdaddy/openclaw:business-smoke-2026.4.27", cmd)
+        self.assertIn("clawdaddy/openclaw:business-smoke-latest", cmd)
         self.assertEqual(cmd[-3:], ["sh", "-lc", "sleep infinity"])
 
     def test_docker_run_mounts_workspace_outside_bench_root(self):
