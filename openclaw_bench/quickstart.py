@@ -111,7 +111,11 @@ def init_quickstart(
     detected_candidate: "ProviderCandidate | None" = None,
 ) -> QuickstartInitResult:
     provider_mode = normalize_provider_selection(providers)
-    if detected_candidate is not None and detected_candidate.provider == "vllm" and detected_candidate.models:
+    if detected_candidate is not None and detected_candidate.provider != "vllm":
+        raise ValueError(f"detected provider {detected_candidate.provider!r} is not supported by oc-bench init yet")
+    if detected_candidate is not None and not detected_candidate.models:
+        raise ValueError(f"detected provider {detected_candidate.provider!r} did not report any models")
+    if detected_candidate is not None and detected_candidate.provider == "vllm":
         vllm = VllmEndpoint(
             base_url=detected_candidate.base_url,
             model=detected_candidate.models[0],
@@ -179,15 +183,23 @@ def init_quickstart(
     )
 
 
-def start_benchclaw_gateway(profile: str = DEFAULT_PROFILE, timeout_s: int = 60) -> PreflightCheck:
-    version = check_openclaw_version()
+def start_benchclaw_gateway(
+    profile: str = DEFAULT_PROFILE,
+    container: str | None = None,
+    timeout_s: int = 60,
+) -> PreflightCheck:
+    version = check_openclaw_version(container)
     if version.status == "fail":
         return version
-    return ensure_openclaw_gateway(profile, None, timeout_s=timeout_s)
+    return ensure_openclaw_gateway(profile, container, timeout_s=timeout_s)
 
 
-def stop_benchclaw_gateway(profile: str = DEFAULT_PROFILE, timeout_s: int = 30) -> PreflightCheck:
-    return stop_openclaw_gateway(profile, timeout_s=timeout_s)
+def stop_benchclaw_gateway(
+    profile: str = DEFAULT_PROFILE,
+    container: str | None = None,
+    timeout_s: int = 30,
+) -> PreflightCheck:
+    return stop_openclaw_gateway(profile, container, timeout_s=timeout_s)
 
 
 def validate_benchclaw_config(profile: str, home: Path | None = None, timeout_s: int = 15) -> PreflightCheck:
@@ -294,7 +306,7 @@ def _openclaw_config(providers: str, project_root: Path, port: int, agent: str, 
     provider_config = {}
     plugin_entries = {}
     if providers in {"local", "both"}:
-        provider_config["vllm"] = _vllm_provider_config(vllm)
+        provider_config["vllm"] = _generate_vllm_route_config(vllm)
         plugin_entries["vllm"] = {"enabled": True}
     if providers in {"api", "both"}:
         provider_config["openai"] = _read_asset_json(project_root, "openclaw-config", "openai-provider.example.json")
@@ -309,10 +321,7 @@ def _openclaw_config(providers: str, project_root: Path, port: int, agent: str, 
     if providers in {"local", "both"}:
         agent_defaults["models"] = {
             vllm.route_model: {
-                "params": {
-                    "maxTokens": vllm.max_tokens,
-                    "chatTemplateKwargs": {"enable_thinking": False},
-                }
+                "params": _vllm_agent_params(vllm)
             }
         }
 
@@ -427,6 +436,35 @@ def _vllm_provider_config(vllm: VllmEndpoint) -> dict:
             }
         ],
     }
+
+
+def _vllm_candidate(vllm: VllmEndpoint) -> "ProviderCandidate":
+    from .providers.detect import ProviderCandidate  # noqa: PLC0415
+
+    return ProviderCandidate(
+        provider="vllm",
+        base_url=vllm.base_url,
+        models=[vllm.model],
+        probe_results={},
+        source="explicit",
+    )
+
+
+def _generate_vllm_route_config(vllm: VllmEndpoint) -> dict:
+    from .providers import vllm as vllm_provider  # noqa: PLC0415
+
+    return vllm_provider.generate_route_config(
+        _vllm_candidate(vllm),
+        context=vllm.context,
+        max_tokens=vllm.max_tokens,
+    )
+
+
+def _vllm_agent_params(vllm: VllmEndpoint) -> dict:
+    from .providers import vllm as vllm_provider  # noqa: PLC0415
+
+    params = vllm_provider.parameter_shaping(_vllm_candidate(vllm))
+    return {"maxTokens": vllm.max_tokens, **params}
 
 
 def _openclaw_route_context(context: int) -> int:

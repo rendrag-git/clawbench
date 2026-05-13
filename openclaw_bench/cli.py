@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         default=60,
         help="Seconds to wait for the OpenClaw route smoke before running task attempts",
     )
-    preflight_parser = subparsers.add_parser("preflight", help="Check whether a benchmark run can execute safely")
+    preflight_parser = subparsers.add_parser("preflight", help="Check benchmark suite/model readiness before a run")
     _add_common_run_args(preflight_parser)
     preflight_parser.add_argument("--json", action="store_true", help="Print machine-readable preflight output")
     preflight_parser.add_argument("--smoke-turn", action="store_true", help="Run a tiny OpenClaw model route turn for eligible models")
@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     preflight_parser.add_argument("--smoke-timeout", type=int, default=60, help="Seconds to wait for each smoke turn")
     provider_preflight_parser = subparsers.add_parser(
         "provider-preflight",
-        help="Run the four verification gates against an OpenClaw profile + provider route.",
+        help="Verify an OpenClaw provider route: config, models list, health, and route smoke",
     )
     provider_preflight_parser.add_argument("--profile", required=True)
     provider_preflight_parser.add_argument("--provider", required=True, choices=["vllm", "ollama", "llamacpp", "lmstudio"])
@@ -203,11 +203,17 @@ def _add_quickstart_init_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-validate", action="store_true", help="Write files without running openclaw config validate")
     parser.add_argument("--no-detect", action="store_true", help="Skip provider auto-detection; use --vllm-* flags or env vars.")
     parser.add_argument("--oc-runtime", default=None, help="Override OpenClaw runtime probe target (e.g., ssh:user@host).")
+    parser.add_argument(
+        "--probe-hosts",
+        default="127.0.0.1",
+        help="Comma-separated host addresses to probe; include bridge/LAN addresses for services not bound to loopback",
+    )
 
 
 def _add_quickstart_lifecycle_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--openclaw-profile", default=DEFAULT_PROFILE)
     parser.add_argument("--timeout", type=int, default=60)
+    parser.add_argument("--oc-runtime", default=None, help="Run OpenClaw commands via runtime target (incus:<instance> or docker:<container>)")
 
 
 def init_command(args: argparse.Namespace) -> int:
@@ -226,6 +232,7 @@ def init_command(args: argparse.Namespace) -> int:
             providers=["vllm", "ollama", "llamacpp", "lmstudio"],
             probes=probes,
             home=probe_home,
+            probe_hosts=_parse_csv(args.probe_hosts),
         )
         for finding in report.findings:
             print(f"finding: {finding}")
@@ -235,7 +242,18 @@ def init_command(args: argparse.Namespace) -> int:
                 "to specify one explicitly, or start a model server first"
             )
             return 2
-        detected = next((c for c in report.candidates if c.provider == "vllm"), report.candidates[0])
+        detected = next((c for c in report.candidates if c.provider == "vllm"), None)
+        if detected is None:
+            detected_summary = ", ".join(
+                f"{candidate.provider}@{candidate.base_url}"
+                for candidate in report.candidates
+            )
+            print(
+                "detected local provider(s) that oc-bench init cannot generate yet: "
+                f"{detected_summary}; supported init provider: vllm. "
+                "Pass --no-detect with --vllm-base-url/--vllm-model for an explicit vLLM route."
+            )
+            return 2
 
     # Inherit path: detection found an existing OC profile with the right wiring
     # already configured. Clone it verbatim and skip the generation flow that
@@ -392,13 +410,21 @@ def _init_via_inheritance(
 
 
 def start_command(args: argparse.Namespace) -> int:
-    check = start_benchclaw_gateway(args.openclaw_profile, timeout_s=args.timeout)
+    check = start_benchclaw_gateway(
+        args.openclaw_profile,
+        container=getattr(args, "oc_runtime", None),
+        timeout_s=args.timeout,
+    )
     print(f"{check.name}={check.status} {check.notes}")
     return 0 if check.status != "fail" else 1
 
 
 def stop_command(args: argparse.Namespace) -> int:
-    check = stop_benchclaw_gateway(args.openclaw_profile, timeout_s=args.timeout)
+    check = stop_benchclaw_gateway(
+        args.openclaw_profile,
+        container=getattr(args, "oc_runtime", None),
+        timeout_s=args.timeout,
+    )
     print(f"{check.name}={check.status} {check.notes}")
     return 0 if check.status != "fail" else 1
 
@@ -449,7 +475,11 @@ def quickstart_command(args: argparse.Namespace) -> int:
         return run_code
     finally:
         if args.stop_after and started:
-            stop_check = stop_benchclaw_gateway(args.openclaw_profile, timeout_s=30)
+            stop_check = stop_benchclaw_gateway(
+                args.openclaw_profile,
+                container=getattr(args, "oc_runtime", None),
+                timeout_s=30,
+            )
             print(f"{stop_check.name}={stop_check.status} {stop_check.notes}")
 
 
@@ -575,7 +605,7 @@ def run_command(args: argparse.Namespace) -> int:
         results = runner.run(config)
     finally:
         if stop_started_gateway:
-            stop_check = stop_openclaw_gateway(args.openclaw_profile, timeout_s=args.openclaw_gateway_timeout)
+            stop_check = stop_openclaw_gateway(args.openclaw_profile, args.openclaw_container, timeout_s=args.openclaw_gateway_timeout)
             print(f"{stop_check.name}={stop_check.status} {stop_check.notes}")
     failures = sum(1 for result in results if result.status != "pass")
     print(f"run_id={run_id}")
